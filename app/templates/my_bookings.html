@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}My bookings — GigTrack{% endblock %}
+{% block content %}
+  <h1>My bookings</h1>
+  {% if not bookings %}
+    <p class="muted">You haven't booked anything yet.</p>
+  {% else %}
+    <table>
+      <thead><tr><th>Concert</th><th>Tier</th><th>Qty</th><th>Total</th><th>Status</th><th>Booked</th></tr></thead>
+      <tbody>
+        {% for b in bookings %}
+          <tr>
+            <td><a href="{{ url_for('concert_detail', concert_id=b.concert_id) }}">{{ b.title }}</a><br><small class="muted">{{ b.venue }}, {{ b.city }}</small></td>
+            <td>{{ b.tier }}</td>
+            <td>{{ b.quantity }}</td>
+            <td>${{ '%.2f'|format(b.total_price) }}</td>
+            <td>{{ b.status }}</td>
+            <td>{{ b.booked_at.strftime('%d %b %Y') if b.booked_at.__class__.__name__ == 'datetime' else b.booked_at }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}

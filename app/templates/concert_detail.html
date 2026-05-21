@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ concert.title }} — GigTrack{% endblock %}
+{% block content %}
+  <article class="concert">
+    <h1>{{ concert.title }}</h1>
+    <p class="muted">
+      {{ concert.venue }}, {{ concert.city }} ·
+      {{ concert.concert_date.strftime('%a %d %b %Y, %H:%M') if concert.concert_date.__class__.__name__ == 'datetime' else concert.concert_date }} ·
+      status: <strong>{{ concert.status }}</strong>
+    </p>
+
+    <section>
+      <h2>Lineup</h2>
+      <ol class="lineup">
+        {% for a in lineup %}
+          <li><strong>{{ a.name }}</strong> <span class="muted">({{ a.role }})</span></li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section class="tickets">
+      <h2>Tickets</h2>
+      <table>
+        <thead><tr><th>Tier</th><th>Price</th><th>Seats left</th><th></th></tr></thead>
+        <tbody>
+          {% for t in tickets %}
+          <tr>
+            <td>{{ t.tier }}</td>
+            <td>${{ '%.2f'|format(t.price) }}</td>
+            <td>{{ t.available_seats }} / {{ t.total_seats }}</td>
+            <td>
+              {% if g.user and t.available_seats > 0 %}
+                <form method="post" action="{{ url_for('book_ticket', concert_id=concert.concert_id) }}">
+                  <input type="hidden" name="ticket_id" value="{{ t.ticket_id }}">
+                  <input type="number" name="quantity" min="1" max="6" value="1">
+                  <button type="submit">Book</button>
+                </form>
+              {% elif not g.user %}
+                <em class="muted"><a href="{{ url_for('login') }}">Log in to book</a></em>
+              {% else %}
+                <em class="muted">Sold out</em>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="setlist">
+      <h2>Setlist <span class="muted">(MongoDB)</span></h2>
+      {% if setlist and setlist.songs %}
+        <ol>
+          {% for s in setlist.songs %}
+            <li>
+              {{ s.title }}
+              {% if s.cover_of %}<span class="muted">(cover of {{ s.cover_of }})</span>{% endif %}
+              {% if s.notes %}<span class="muted">— {{ s.notes }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+        {% if setlist.encore_songs %}
+          <h3>Encore</h3>
+          <ol>
+            {% for s in setlist.encore_songs %}<li>{{ s.title }}</li>{% endfor %}
+          </ol>
+        {% endif %}
+        <p class="muted">Submitted by user #{{ setlist.submitted_by_user_id }} · upvotes: {{ setlist.upvotes }}</p>
+      {% else %}
+        <p class="muted">No setlist submitted yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="reviews">
+      <h2>Reviews <span class="muted">(MongoDB)</span></h2>
+      {% if g.user %}
+        <form class="review-form" method="post" action="{{ url_for('post_review', concert_id=concert.concert_id) }}">
+          <input name="title" placeholder="Title" required>
+          <input name="rating" type="number" min="1" max="5" value="5" required>
+          <textarea name="body" placeholder="How was the gig?" rows="3" required></textarea>
+          <input name="tags" placeholder="tags, comma, separated">
+          <button>Post review</button>
+        </form>
+      {% endif %}
+      {% for r in reviews %}
+        <article class="review">
+          <h3>{{ r.title }} <small>· {{ r.rating }}/5</small></h3>
+          <p>{{ r.body }}</p>
+          {% if r.tags %}<p class="muted">tags: {{ r.tags|join(', ') }}</p>{% endif %}
+          <form method="post" action="{{ url_for('upvote_review', review_id=r._id) }}">
+            <button>👍 {{ r.helpful_count }}</button>
+          </form>
+        </article>
+      {% else %}
+        <p class="muted">Be the first to review this gig.</p>
+      {% endfor %}
+    </section>
+  </article>
+{% endblock %}

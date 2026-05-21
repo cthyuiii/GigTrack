@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}GigTrack{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="{{ url_for('home') }}">GigTrack</a>
+      <form class="search" method="get" action="{{ url_for('home') }}">
+        <input name="city" placeholder="Filter by city" value="{{ request.args.get('city','') }}">
+      </form>
+      <div class="nav-right">
+        {% if g.user %}
+          <span>Hey, {{ g.user.username }}</span>
+          <a href="{{ url_for('my_bookings') }}">My bookings</a>
+          <a href="{{ url_for('logout') }}">Log out</a>
+        {% else %}
+          <a href="{{ url_for('login') }}">Log in</a>
+          <a href="{{ url_for('signup') }}">Sign up</a>
+        {% endif %}
+      </div>
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flash">
+          {% for m in messages %}<li>{{ m }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer><small>GigTrack · INF2003 demo · MySQL + MongoDB + Redis</small></footer>
+</body>
+</html>

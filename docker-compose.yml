@@ -8,7 +8,9 @@ services:
       MYSQL_DATABASE: gigtrack
       MYSQL_USER: gigtrack
       MYSQL_PASSWORD: gigtrack_pw
-    ports: ["3306:3306"]
+    # Host-side port remapped to 3307 to avoid clashing with a locally-running
+    # MySQL/MariaDB on 3306. Inside the compose network the app still uses 3306.
+    ports: ["3307:3306"]
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
@@ -20,13 +22,15 @@ services:
 
   mongo:
     image: mongo:7
-    ports: ["27017:27017"]
+    # Remapped to 27018 in case a local Mongo is running on 27017.
+    ports: ["27018:27017"]
     volumes:
       - mongo_data:/data/db
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    # Remapped to 6380 in case a local Redis is running on 6379.
+    ports: ["6380:6379"]
 
   app:
     build: .
@@ -45,7 +49,9 @@ services:
       MONGO_URI:      mongodb://mongo:27017
       REDIS_URL:      redis://redis:6379/0
       FLASK_SECRET:   change-me-in-prod
-    ports: ["5000:5000"]
+    # Host-side port remapped to 5001 because macOS AirPlay Receiver
+    # binds 5000 by default. Inside the container Flask still listens on 5000.
+    ports: ["5001:5000"]
     command: >
       sh -c "python mongo/seed.py &&
              python -m flask --app app/app.py run --host 0.0.0.0 --port 5000"

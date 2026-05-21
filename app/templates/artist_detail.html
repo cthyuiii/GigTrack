@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ artist.name }} — GigTrack{% endblock %}
+{% block content %}
+  <h1>{{ artist.name }}</h1>
+  <p class="muted">{{ artist.genre }} · {{ artist.country }}</p>
+
+  {% if g.user %}
+    <form method="post" action="{{ url_for('toggle_follow', artist_id=artist.artist_id) }}">
+      <button>{{ 'Unfollow' if is_following else 'Follow' }}</button>
+    </form>
+  {% endif %}
+
+  {% if bio %}
+    <section>
+      <h2>About <span class="muted">(MongoDB)</span></h2>
+      <p>{{ bio.bio_text }}</p>
+      {% if bio.tour_history %}
+        <h3>Tour history</h3>
+        <ul>
+          {% for t in bio.tour_history %}
+            <li>{{ t.year }} — {{ t.name }} <span class="muted">({{ t.regions|join(', ') }})</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section>
+    <h2>Upcoming concerts</h2>
+    {% if upcoming %}
+      <ul>
+        {% for c in upcoming %}
+          <li>
+            <a href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">{{ c.title }}</a>
+            <span class="muted">— {{ c.city }} ·
+              {{ c.concert_date.strftime('%d %b %Y') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No upcoming dates.</p>
+    {% endif %}
+  </section>
+{% endblock %}

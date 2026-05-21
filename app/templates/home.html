@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}GigTrack — concerts{% endblock %}
+{% block content %}
+  <h1>{% if city %}Upcoming in {{ city }}{% else %}Upcoming concerts{% endif %}</h1>
+  {% if not concerts %}
+    <p class="muted">No concerts found.</p>
+  {% endif %}
+  <ul class="cards">
+    {% for c in concerts %}
+      <li class="card">
+        <a class="card-title" href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">{{ c.title }}</a>
+        <p>{{ c.headliner }} <span class="muted">· {{ c.genre or '' }}</span></p>
+        <p>{{ c.venue }}, {{ c.city }}</p>
+        <p class="muted">{{ c.concert_date.strftime('%a %d %b %Y · %H:%M') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}</p>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}
