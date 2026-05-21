@@ -1,0 +1,94 @@
+erDiagram
+    USERS ||--o{ BOOKINGS : "places"
+    USERS ||--o{ FOLLOWS : "follows"
+    USERS ||--o{ REVIEWS_PTR : "writes"
+    ARTISTS ||--o{ FOLLOWS : "is followed by"
+    ARTISTS ||--o{ CONCERTS : "headlines"
+    ARTISTS ||--o{ CONCERT_ARTISTS : "is in lineup of"
+    CONCERTS ||--o{ CONCERT_ARTISTS : "has supporting"
+    VENUES ||--o{ CONCERTS : "hosts"
+    CONCERTS ||--o{ TICKETS : "offers"
+    TICKETS ||--o{ BOOKINGS : "is purchased in"
+    CONCERTS ||--o{ REVIEWS_PTR : "is reviewed in (Mongo)"
+    CONCERTS ||--o{ SETLISTS_PTR : "has setlist (Mongo)"
+
+    USERS {
+        int user_id PK
+        varchar username UK
+        varchar email UK
+        varchar password_hash
+        varchar home_city
+        datetime created_at
+    }
+
+    ARTISTS {
+        int artist_id PK
+        varchar name
+        varchar genre
+        varchar country
+        varchar image_url
+    }
+
+    VENUES {
+        int venue_id PK
+        varchar name
+        varchar city
+        varchar country
+        int capacity
+        decimal lat
+        decimal lng
+    }
+
+    CONCERTS {
+        int concert_id PK
+        int venue_id FK
+        int headline_artist_id FK
+        varchar title
+        datetime concert_date
+        enum status
+        decimal base_price
+        int view_count
+    }
+
+    CONCERT_ARTISTS {
+        int concert_id PK_FK
+        int artist_id PK_FK
+        int slot_order
+        varchar role
+    }
+
+    TICKETS {
+        int ticket_id PK
+        int concert_id FK
+        varchar tier
+        decimal price
+        int total_seats
+        int available_seats
+    }
+
+    BOOKINGS {
+        int booking_id PK
+        int user_id FK
+        int ticket_id FK
+        int quantity
+        decimal total_price
+        enum status
+        datetime booked_at
+    }
+
+    FOLLOWS {
+        int user_id PK_FK
+        int artist_id PK_FK
+        datetime followed_at
+    }
+
+    REVIEWS_PTR {
+        string mongo_review_id "stored in MongoDB.reviews"
+        int concert_id "logical FK"
+        int user_id "logical FK"
+    }
+
+    SETLISTS_PTR {
+        string mongo_setlist_id "stored in MongoDB.setlists"
+        int concert_id "logical FK"
+    }
