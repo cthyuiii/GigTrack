@@ -9,10 +9,10 @@
 -- ============================================================
 
 INSERT INTO users (username, email, password_hash, home_city) VALUES
-  ('macc',      'macc@example.com',  '$2b$12$KIXJ5gqlqbhBPLZ8Yk1pZ.fz7e6T7TXKvR3pE/cN9b5BcTBe9wYqu', 'Singapore'),
-  ('alex_riff', 'alex@example.com',  '$2b$12$KIXJ5gqlqbhBPLZ8Yk1pZ.fz7e6T7TXKvR3pE/cN9b5BcTBe9wYqu', 'Singapore'),
-  ('mia_beats', 'mia@example.com',   '$2b$12$KIXJ5gqlqbhBPLZ8Yk1pZ.fz7e6T7TXKvR3pE/cN9b5BcTBe9wYqu', 'Kuala Lumpur'),
-  ('drew_loud', 'drew@example.com',  '$2b$12$KIXJ5gqlqbhBPLZ8Yk1pZ.fz7e6T7TXKvR3pE/cN9b5BcTBe9wYqu', 'Tokyo');
+  ('macc',      'macc@example.com',  '$2b$12$1nWfTl72I7cXuuntYbZCdevCXVSSYW5MCaC3TOxX.j3YXwV4.sv/y', 'Singapore'),
+  ('alex_riff', 'alex@example.com',  '$2b$12$1nWfTl72I7cXuuntYbZCdevCXVSSYW5MCaC3TOxX.j3YXwV4.sv/y', 'Singapore'),
+  ('mia_beats', 'mia@example.com',   '$2b$12$1nWfTl72I7cXuuntYbZCdevCXVSSYW5MCaC3TOxX.j3YXwV4.sv/y', 'Kuala Lumpur'),
+  ('drew_loud', 'drew@example.com',  '$2b$12$1nWfTl72I7cXuuntYbZCdevCXVSSYW5MCaC3TOxX.j3YXwV4.sv/y', 'Tokyo');
 
 INSERT INTO artists (name, genre, country, image_url) VALUES
   ('The Midnight Lanterns', 'Indie Rock',  'UK',        '/static/img/midnight.jpg'),

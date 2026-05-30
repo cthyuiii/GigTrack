@@ -74,18 +74,30 @@
     <section class="reviews">
       <h2>Reviews <span class="muted">(MongoDB)</span></h2>
       {% if g.user %}
-        <form class="review-form" method="post" action="{{ url_for('post_review', concert_id=concert.concert_id) }}">
+        <form class="review-form" method="post" enctype="multipart/form-data"
+              action="{{ url_for('post_review', concert_id=concert.concert_id) }}">
           <input name="title" placeholder="Title" required>
           <input name="rating" type="number" min="1" max="5" value="5" required>
           <textarea name="body" placeholder="How was the gig?" rows="3" required></textarea>
           <input name="tags" placeholder="tags, comma, separated">
+          <label class="muted">Photos (optional):
+            <input name="photos" type="file" accept="image/*" multiple>
+          </label>
           <button>Post review</button>
         </form>
       {% endif %}
       {% for r in reviews %}
         <article class="review">
           <h3>{{ r.title }} <small>· {{ r.rating }}/5</small></h3>
+          <p class="muted">by {{ r.author or 'Unknown' }}</p>
           <p>{{ r.body }}</p>
+          {% if r.photos %}
+            <div class="review-photos">
+              {% for p in r.photos %}
+                <img src="{{ p.url }}" alt="{{ p.caption or 'review photo' }}" loading="lazy">
+              {% endfor %}
+            </div>
+          {% endif %}
           {% if r.tags %}<p class="muted">tags: {{ r.tags|join(', ') }}</p>{% endif %}
           <form method="post" action="{{ url_for('upvote_review', review_id=r._id) }}">
             <button>👍 {{ r.helpful_count }}</button>

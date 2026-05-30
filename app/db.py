@@ -7,6 +7,12 @@ app code stays readable and each store's role is obvious to a reader.
 import os
 from contextlib import contextmanager
 
+# Load a local .env (if present) BEFORE we read any environment variables.
+# db.py is imported before app.py touches config, and the dicts / clients
+# below are built at import time, so this has to run first to take effect.
+from dotenv import load_dotenv
+load_dotenv()
+
 import pymysql
 from pymongo import MongoClient
 import redis

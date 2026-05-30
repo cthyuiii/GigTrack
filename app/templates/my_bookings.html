@@ -6,7 +6,7 @@
     <p class="muted">You haven't booked anything yet.</p>
   {% else %}
     <table>
-      <thead><tr><th>Concert</th><th>Tier</th><th>Qty</th><th>Total</th><th>Status</th><th>Booked</th></tr></thead>
+      <thead><tr><th>Concert</th><th>Tier</th><th>Qty</th><th>Total</th><th>Status</th><th>Booked</th><th></th></tr></thead>
       <tbody>
         {% for b in bookings %}
           <tr>
@@ -16,6 +16,14 @@
             <td>${{ '%.2f'|format(b.total_price) }}</td>
             <td>{{ b.status }}</td>
             <td>{{ b.booked_at.strftime('%d %b %Y') if b.booked_at.__class__.__name__ == 'datetime' else b.booked_at }}</td>
+            <td>
+              {% if b.status == 'confirmed' %}
+                <form method="post" action="{{ url_for('cancel_booking', booking_id=b.booking_id) }}"
+                      onsubmit="return confirm('Cancel this booking and release the seats?');">
+                  <button type="submit">Cancel</button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>

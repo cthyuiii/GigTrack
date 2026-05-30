@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   mysql:
     image: mysql:8.0
@@ -32,6 +30,17 @@ services:
     # Remapped to 6380 in case a local Redis is running on 6379.
     ports: ["6380:6379"]
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    # 9000 = S3 API (app + browser image URLs); 9001 = web console.
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - minio_data:/data
+
   app:
     build: .
     depends_on:
@@ -41,6 +50,8 @@ services:
         condition: service_started
       redis:
         condition: service_started
+      minio:
+        condition: service_started
     environment:
       MYSQL_HOST:     mysql
       MYSQL_USER:     gigtrack
@@ -49,13 +60,22 @@ services:
       MONGO_URI:      mongodb://mongo:27017
       REDIS_URL:      redis://redis:6379/0
       FLASK_SECRET:   change-me-in-prod
+      # Object storage. S3_ENDPOINT is the in-network URL boto3 uses;
+      # S3_PUBLIC_URL is what the browser uses for <img src> (host-mapped).
+      S3_ENDPOINT:    http://minio:9000
+      S3_PUBLIC_URL:  http://localhost:9000
+      S3_ACCESS_KEY:  minioadmin
+      S3_SECRET_KEY:  minioadmin
+      S3_BUCKET:      gigtrack-media
     # Host-side port remapped to 5001 because macOS AirPlay Receiver
     # binds 5000 by default. Inside the container Flask still listens on 5000.
     ports: ["5001:5000"]
     command: >
       sh -c "python mongo/seed.py &&
+             python app/storage.py || true &&
              python -m flask --app app/app.py run --host 0.0.0.0 --port 5000"
 
 volumes:
   mysql_data:
   mongo_data:
+  minio_data:

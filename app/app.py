@@ -6,23 +6,55 @@ Run:
     flask run --port 5000
 """
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
+from uuid import uuid4
 
 import bcrypt
 from bson import ObjectId
 from flask import (Flask, abort, flash, g, redirect, render_template,
                    request, session, url_for)
+from werkzeug.utils import secure_filename
 
+import storage
 from db import execute, get_mysql, mongo, query_all, query_one, redis_client
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret-change-me")
 
+log = logging.getLogger("gigtrack")
+
 CACHE_TTL_SECONDS = 60
 TRENDING_TTL      = 5 * 60
+
+
+# ============================================================
+# View-count flush (Redis -> MySQL)
+# ============================================================
+# Each concert detail view does a cheap Redis INCR on a *pending delta* key.
+# Before we render any list ordered by view_count, we drain those deltas into
+# MySQL so the durable counter (and therefore the trending order) is correct.
+# GETDEL is atomic, so a concurrent viewer's increment is never lost — it just
+# lands in the next flush. This is the "flush periodically" pattern described
+# in docs/schema_design.md, triggered opportunistically instead of via cron.
+
+def flush_view_counts():
+    updates = []
+    for key in redis_client.scan_iter(match="concert:*:views"):
+        delta = redis_client.getdel(key)
+        if delta and int(delta) != 0:
+            concert_id = int(key.split(":")[1])
+            updates.append((int(delta), concert_id))
+    if not updates:
+        return
+    with get_mysql() as conn, conn.cursor() as cur:
+        cur.executemany(
+            "UPDATE concerts SET view_count = view_count + %s WHERE concert_id = %s",
+            updates,
+        )
 
 
 # ============================================================
@@ -60,14 +92,20 @@ def signup():
         password = request.form["password"]
         city     = request.form.get("home_city", "").strip() or None
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        if not username or not email or not password:
+            flash("Username, email and password are all required.")
+            return render_template("signup.html")
         try:
             execute(
                 "INSERT INTO users (username, email, password_hash, home_city) "
                 "VALUES (%s, %s, %s, %s)",
                 (username, email, pw_hash, city),
             )
-        except Exception as e:
-            flash(f"Sign-up failed: {e}")
+        except Exception:
+            # Most likely a duplicate username/email (UNIQUE constraint).
+            # Log the detail server-side; show the user a safe message.
+            log.exception("Sign-up failed for email=%s", email)
+            flash("Sign-up failed — that username or email may already be in use.")
             return render_template("signup.html")
         flash("Account created — please log in.")
         return redirect(url_for("login"))
@@ -106,13 +144,19 @@ def logout():
 @app.route("/")
 def home():
     city = request.args.get("city")
-    # Trending list — try Redis cache first
-    if city:
-        cache_key = f"trending:city:{city}"
-        cached = redis_client.get(cache_key)
-        if cached:
-            concerts = json.loads(cached)
-        else:
+
+    # Drain pending view deltas into MySQL so view_count (and the trending
+    # order below) reflects reality before we read it.
+    flush_view_counts()
+
+    # Both branches are cacheable. The cache key encodes whether a city filter
+    # is applied so the two result sets never collide.
+    cache_key = f"trending:city:{city}" if city else "trending:all"
+    cached = redis_client.get(cache_key)
+    if cached:
+        concerts = json.loads(cached)
+    else:
+        if city:
             concerts = query_all(
                 """
                 SELECT c.concert_id, c.title, c.concert_date, c.view_count,
@@ -127,22 +171,23 @@ def home():
                 """,
                 (city,),
             )
-            redis_client.setex(cache_key, TRENDING_TTL,
-                               json.dumps(concerts, default=str))
-    else:
-        concerts = query_all(
-            """
-            SELECT c.concert_id, c.title, c.concert_date, c.view_count,
-                   v.name AS venue, v.city,
-                   a.name AS headliner, a.genre
-            FROM   concerts c
-            JOIN   venues  v ON v.venue_id  = c.venue_id
-            JOIN   artists a ON a.artist_id = c.headline_artist_id
-            WHERE  c.status = 'scheduled'
-            ORDER  BY c.concert_date ASC
-            LIMIT  20
-            """
-        )
+        else:
+            concerts = query_all(
+                """
+                SELECT c.concert_id, c.title, c.concert_date, c.view_count,
+                       v.name AS venue, v.city,
+                       a.name AS headliner, a.genre
+                FROM   concerts c
+                JOIN   venues  v ON v.venue_id  = c.venue_id
+                JOIN   artists a ON a.artist_id = c.headline_artist_id
+                WHERE  c.status = 'scheduled'
+                ORDER  BY c.concert_date ASC
+                LIMIT  20
+                """
+            )
+        redis_client.setex(cache_key, TRENDING_TTL,
+                           json.dumps(concerts, default=str))
+
     return render_template("home.html", concerts=concerts, city=city)
 
 
@@ -188,6 +233,19 @@ def concert_detail(concert_id):
                      .sort("posted_at", -1).limit(20)
     )
 
+    # Reviews only store the integer user_id (a logical FK into MySQL).
+    # Resolve those to usernames in one batched query for display.
+    user_ids = {r["user_id"] for r in reviews if r.get("user_id") is not None}
+    if user_ids:
+        placeholders = ",".join(["%s"] * len(user_ids))
+        rows = query_all(
+            f"SELECT user_id, username FROM users WHERE user_id IN ({placeholders})",
+            tuple(user_ids),
+        )
+        names = {row["user_id"]: row["username"] for row in rows}
+        for r in reviews:
+            r["author"] = names.get(r.get("user_id"), "Unknown")
+
     return render_template(
         "concert_detail.html",
         concert=concert, lineup=lineup, tickets=tickets,
@@ -232,8 +290,17 @@ def artist_detail(artist_id):
 @app.route("/concerts/<int:concert_id>/book", methods=["POST"])
 @login_required
 def book_ticket(concert_id):
-    ticket_id = int(request.form["ticket_id"])
-    quantity  = int(request.form["quantity"])
+    try:
+        ticket_id = int(request.form["ticket_id"])
+        quantity  = int(request.form["quantity"])
+    except (KeyError, ValueError):
+        abort(400, "Invalid ticket or quantity")
+
+    # Guard against zero / negative quantities: a non-positive value would
+    # create a junk booking and, for negatives, try to *inflate* inventory.
+    if quantity < 1 or quantity > 6:
+        flash("Please choose a quantity between 1 and 6.")
+        return redirect(url_for("concert_detail", concert_id=concert_id))
 
     ticket = query_one(
         "SELECT price FROM tickets WHERE ticket_id = %s AND concert_id = %s",
@@ -249,10 +316,13 @@ def book_ticket(concert_id):
             "VALUES (%s, %s, %s, %s)",
             (g.user["user_id"], ticket_id, quantity, total),
         )
-        flash(f"Booked {quantity} x {ticket['price']}. Total ${total:.2f}.")
-    except Exception as e:
-        # Trigger raises if seats insufficient — show that to the user
-        flash(f"Booking failed: {e}")
+        flash(f"Booked {quantity} x ${ticket['price']}. Total ${total:.2f}.")
+    except Exception:
+        # The BEFORE INSERT trigger raises (SQLSTATE 45000) when seats are
+        # insufficient. Log the real cause; tell the user something safe.
+        log.exception("Booking failed for user=%s ticket=%s",
+                      g.user["user_id"], ticket_id)
+        flash("Booking failed — there may not be enough seats left in that tier.")
     return redirect(url_for("concert_detail", concert_id=concert_id))
 
 
@@ -281,19 +351,44 @@ def toggle_follow(artist_id):
 @app.route("/concerts/<int:concert_id>/review", methods=["POST"])
 @login_required
 def post_review(concert_id):
+    try:
+        rating = int(request.form["rating"])
+    except (KeyError, ValueError):
+        abort(400, "Invalid rating")
+    if not 1 <= rating <= 5:
+        flash("Rating must be between 1 and 5.")
+        return redirect(url_for("concert_detail", concert_id=concert_id))
+
+    # Upload any attached photos to object storage. The BLOB goes to MinIO/S3;
+    # the review document keeps only a pointer ({url, key, caption}). If storage
+    # is disabled or a single upload fails, we still post the review text.
+    photos = []
+    if storage.is_enabled():
+        for f in request.files.getlist("photos"):
+            if not f or not f.filename:
+                continue
+            safe = secure_filename(f.filename) or "photo"
+            key = f"reviews/{concert_id}/{uuid4().hex}-{safe}"
+            try:
+                url = storage.upload_fileobj(f.stream, key, f.mimetype)
+                photos.append({"url": url, "key": key, "caption": f.filename})
+            except Exception:
+                log.exception("Photo upload failed for concert=%s key=%s",
+                              concert_id, key)
+
     review = {
         "concert_id":   concert_id,
         "user_id":      g.user["user_id"],
-        "rating":       int(request.form["rating"]),
+        "rating":       rating,
         "title":        request.form["title"].strip(),
         "body":         request.form["body"].strip(),
         "tags":         [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()],
-        "photos":       [],
+        "photos":       photos,
         "helpful_count": 0,
         "posted_at":    datetime.now(timezone.utc),
     }
     mongo.reviews.insert_one(review)
-    flash("Review posted.")
+    flash(f"Review posted{' with ' + str(len(photos)) + ' photo(s)' if photos else ''}.")
     return redirect(url_for("concert_detail", concert_id=concert_id))
 
 
@@ -324,6 +419,29 @@ def my_bookings():
         (g.user["user_id"],),
     )
     return render_template("my_bookings.html", bookings=rows)
+
+
+@app.route("/my/bookings/<int:booking_id>/cancel", methods=["POST"])
+@login_required
+def cancel_booking(booking_id):
+    # Only allow cancelling your own, currently-confirmed booking. The
+    # ownership + status check is done in the WHERE clause so a forged
+    # booking_id simply matches zero rows. The AFTER UPDATE trigger
+    # (trg_booking_restore_seats_on_cancel) puts the seats back.
+    booking = query_one(
+        "SELECT booking_id FROM bookings "
+        "WHERE booking_id = %s AND user_id = %s AND status = 'confirmed'",
+        (booking_id, g.user["user_id"]),
+    )
+    if not booking:
+        flash("That booking can't be cancelled.")
+        return redirect(url_for("my_bookings"))
+    execute(
+        "UPDATE bookings SET status = 'cancelled' WHERE booking_id = %s",
+        (booking_id,),
+    )
+    flash("Booking cancelled — seats released.")
+    return redirect(url_for("my_bookings"))
 
 
 # ============================================================

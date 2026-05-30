@@ -82,8 +82,8 @@ Justification: photo arrays and tag arrays are variable-length; body is unstruct
 
 | Key pattern | Type | Purpose | TTL |
 |---|---|---|---|
-| `concert:{id}:views` | counter | view count, flushed to MySQL hourly | none |
-| `trending:city:{city}` | sorted set | top concerts by views in city | 5 min |
+| `concert:{id}:views` | counter | pending view delta; drained into MySQL `concerts.view_count` by `flush_view_counts()` before any view-ordered list renders (GETDEL = atomic, lossless) | none |
+| `trending:city:{city}` / `trending:all` | string (JSON) | cached home/trending listing | 5 min |
 | `search:artist:{prefix}` | set | autocomplete | 1 hr |
 | `session:{token}` | string (user_id) | auth session | 30 min |
 | `concert:{id}:detail` | hash | cached detail-page payload | 60 s |
@@ -92,7 +92,19 @@ This gives a clear demoable speedup on the home/detail pages and offloads view-c
 
 ## 4. Object storage (file uploads)
 
-Concert photos and user-uploaded review photos. Scaffold uses local `app/static/uploads/` for simplicity; the report should mention swapping in S3/MinIO with a `photos[].url` field in Mongo pointing to bucket keys.
+Review photos (binary media) are stored in an **S3-compatible object store** — MinIO locally (`app/storage.py`, `gigtrack-media` bucket), swappable for AWS S3 / Cloudflare R2 by changing only the endpoint + credentials.
+
+**The blob lives in object storage; the database keeps only a pointer.** A review document in Mongo stores:
+```json
+"photos": [
+  {"url": "http://localhost:9000/gigtrack-media/reviews/6/<uuid>.jpg",
+   "key": "reviews/6/<uuid>.jpg",
+   "caption": "Stage from balcony"}
+]
+```
+Justification: documents have a 16 MB cap, and putting image bytes in MySQL/Mongo bloats the working set, slows backups/replication, and prevents CDN delivery. Object storage is purpose-built for large immutable blobs and is cheap and effectively unbounded. The three-tier media model is: MySQL owns the relational subject (which user/concert), Mongo owns the *structured photo metadata* (caption, order), and the object store owns the *bytes*.
+
+The demo uses a public-read bucket policy so `<img src>` works directly; `storage.presigned_url()` shows the private-bucket (time-limited signed URL) alternative for production.
 
 ## 5. SQL ↔ NoSQL boundary
 

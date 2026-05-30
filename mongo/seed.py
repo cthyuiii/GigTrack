@@ -2,22 +2,40 @@
 GigTrack — MongoDB seed script.
 
 Usage:
-    python mongo/seed.py
+    python mongo/seed.py            # idempotent: seeds only if collections are empty
+    python mongo/seed.py --force    # wipe and re-seed (also: SEED_FORCE=1)
 
 Reads MONGO_URI from environment (defaults to mongodb://localhost:27017).
-Drops and recreates the `gigtrack` database collections: setlists, reviews, artist_bios.
+Seeds the `gigtrack` collections: setlists, reviews, artist_bios.
+
+By default this is SAFE TO RUN ON EVERY APP BOOT — it will not destroy data
+a user created during the session. It only drops + reseeds when --force /
+SEED_FORCE=1 is given.
 """
 import os
+import sys
 from datetime import datetime, timezone
 from pymongo import MongoClient, ASCENDING, DESCENDING, TEXT
 
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+FORCE = "--force" in sys.argv or os.environ.get("SEED_FORCE") == "1"
 
 client = MongoClient(MONGO_URI)
 db = client["gigtrack"]
 
-# ---- wipe ---------------------------------------------------------------
-for coll in ("setlists", "reviews", "artist_bios"):
+COLLECTIONS = ("setlists", "reviews", "artist_bios")
+
+# ---- idempotency guard --------------------------------------------------
+already_seeded = any(db[c].estimated_document_count() > 0 for c in COLLECTIONS)
+if already_seeded and not FORCE:
+    print("gigtrack Mongo collections already populated — skipping seed "
+          "(use --force or SEED_FORCE=1 to wipe and reseed).")
+    for coll in COLLECTIONS:
+        print(f"  {coll}: {db[coll].count_documents({})} docs")
+    sys.exit(0)
+
+# ---- wipe (only when seeding) -------------------------------------------
+for coll in COLLECTIONS:
     db[coll].drop()
 
 # ---- setlists -----------------------------------------------------------

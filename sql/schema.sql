@@ -61,7 +61,11 @@ CREATE TABLE concerts (
   FOREIGN KEY (headline_artist_id) REFERENCES artists(artist_id),
   INDEX idx_concerts_date   (concert_date),
   INDEX idx_concerts_venue  (venue_id),
-  INDEX idx_concerts_artist (headline_artist_id)
+  INDEX idx_concerts_artist (headline_artist_id),
+  -- The home/trending queries always filter on status = 'scheduled';
+  -- a composite (status, concert_date) index serves both the filter and
+  -- the ORDER BY concert_date in a single index scan.
+  INDEX idx_concerts_status_date (status, concert_date)
 ) ENGINE=InnoDB;
 
 -- M:N junction — supporting artists / festival lineups
