@@ -1,5 +1,5 @@
 """
-GigTrack — performance benchmark (project brief Task 7).
+GigTrack — performance benchmark.
 
 Measures several dimensions, not just one, and writes machine-readable output:
 

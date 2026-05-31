@@ -79,8 +79,7 @@ gigtrack/
 ├── scripts/
 │   ├── generate_seed.py       Writes the larger synthetic sql/seed.sql
 │   ├── generate_images.py     PIL posters → MinIO → artists.image_url
-│   ├── benchmark.py           Multi-dimension perf benchmark → CSV + chart
-│   └── make_benchmark_slide.py  Builds a .pptx slide from the benchmark CSV
+│   └── benchmark.py           Multi-dimension perf benchmark → CSV + chart
 ├── docker-compose.yml
 ├── Dockerfile
 └── requirements.txt
@@ -110,8 +109,8 @@ gigtrack/
 11. **Admin** (log in as `macc`) → `/admin`: create/edit/delete concerts and
     ticket tiers, and view/edit/disable/delete user accounts.
 12. Run `PYTHONPATH=app python scripts/benchmark.py` → writes
-    `benchmark_results.csv` + `benchmark_latency.png`; then
-    `python scripts/make_benchmark_slide.py` builds `benchmark_slide.pptx`.
+    `benchmark_results.csv` + `benchmark_latency.png` (cached-vs-uncached and
+    indexed-vs-scan timings).
 
 ## Security notes
 
@@ -131,7 +130,7 @@ gigtrack/
 | Task 4 — CRUD (SQL + NoSQL, all wired into the app) | SQL: signup/booking/profile/admin + `sql/queries.sql` (A); Mongo: review create/read/like/delete + `mongo/queries.py` |
 | Task 5 — complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (D nested, G window, H CTE, I transaction, E triggers); Mongo `$facet` + `$lookup` in `mongo/queries.py` |
 | Task 6 — GenAI reflection | Add to final report |
-| Task 7 — perf analysis | `scripts/benchmark.py` (cache, index-vs-scan, percentiles, throughput, payload scaling) → CSV + chart + slide |
+| Task 7 — perf analysis | `scripts/benchmark.py` (cache, index-vs-scan, percentiles, throughput, payload scaling) → CSV + chart |
 | Task 8 — web UI + admin | `app/` + `/admin` dashboard |
 | Data organization & security | `docs/schema_design.md`; Security notes above |
 | Object storage | `app/storage.py` + MinIO; blobs in storage, pointers in Mongo (`docs/schema_design.md` §4) |

@@ -67,6 +67,9 @@ services:
       S3_ACCESS_KEY:  minioadmin
       S3_SECRET_KEY:  minioadmin
       S3_BUCKET:      gigtrack-media
+      # Artist image source: pollinations (free, key-less AI) | openai | none.
+      # Set to "none" for a fast, fully-offline boot (procedural posters).
+      IMAGE_PROVIDER: pollinations
     # Host-side port remapped to 5001 because macOS AirPlay Receiver
     # binds 5000 by default. Inside the container Flask still listens on 5000.
     ports: ["5001:5000"]

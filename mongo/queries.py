@@ -1,6 +1,6 @@
 """
 GigTrack — Sample MongoDB queries.
-Each function corresponds to a query you can show in the report or demo video.
+Each function corresponds to a representative MongoDB query used by the app.
 """
 import os
 from pymongo import MongoClient, DESCENDING

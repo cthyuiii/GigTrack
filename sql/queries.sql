@@ -1,6 +1,7 @@
 -- ============================================================
 -- GigTrack — Sample SQL queries
--- Covers project tasks 4 (CRUD) and 5 (complex queries, triggers).
+-- CRUD, joins, aggregation, nested/correlated subqueries, window
+-- functions, CTEs, transactions, and trigger demonstrations.
 -- Each block is independently runnable after schema.sql + seed.sql.
 -- ============================================================
 

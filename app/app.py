@@ -890,7 +890,52 @@ def _bust_trending_cache():
 
 
 # ============================================================
-# Healthcheck — useful for the demo and for verifying the stack
+# Static info pages (footer links)
+# ============================================================
+
+INFO_PAGES = {
+    "about": ("About GigTrack",
+              "<p>GigTrack is the easiest way to discover live music, grab tickets, "
+              "and relive the night with fan-sourced setlists and reviews. We bring "
+              "every show — from intimate club gigs to arena tours — into one place.</p>"
+              "<p>Founded by music fans, for music fans.</p>"),
+    "careers": ("Careers",
+                "<p>We're a small team that loves shipping. We're not actively hiring "
+                "right now, but we always want to hear from great people — "
+                "<a href='/contact'>say hello</a>.</p>"),
+    "help": ("Help Centre",
+             "<p>Need a hand? Most answers live here:</p>"
+             "<ul><li>Booking &amp; tickets: manage everything under "
+             "<a href='/my/bookings'>My bookings</a>.</li>"
+             "<li>Account: update your details on your "
+             "<a href='/my/profile'>profile</a>.</li>"
+             "<li>Refunds: cancel a confirmed booking to release the seats.</li></ul>"),
+    "contact": ("Contact us",
+                "<p>We'd love to hear from you.</p>"
+                "<ul><li>General: <a href='mailto:hello@gigtrack.example'>hello@gigtrack.example</a></li>"
+                "<li>Support: <a href='mailto:support@gigtrack.example'>support@gigtrack.example</a></li>"
+                "<li>Press: <a href='mailto:press@gigtrack.example'>press@gigtrack.example</a></li></ul>"
+                "<p>GigTrack HQ · 1 Marina Boulevard · Singapore</p>"),
+    "terms": ("Terms of Service",
+              "<p>This is a demonstration application. By using GigTrack you agree "
+              "that bookings, prices, and events shown are illustrative only.</p>"),
+    "privacy": ("Privacy Policy",
+                "<p>We store your account details to provide the service and never "
+                "sell your data. This is a demonstration application; do not enter "
+                "real personal information.</p>"),
+}
+
+
+@app.route("/<page>")
+def info_page(page):
+    if page not in INFO_PAGES:
+        abort(404)
+    title, body = INFO_PAGES[page]
+    return render_template("info.html", page_title=title, body=body)
+
+
+# ============================================================
+# Healthcheck — useful for verifying the stack
 # ============================================================
 @app.route("/healthz")
 def healthz():

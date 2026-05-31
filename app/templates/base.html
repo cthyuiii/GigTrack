@@ -47,6 +47,41 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
-  <footer><small>GigTrack · INF2003 demo · MySQL + MongoDB + Redis + MinIO</small></footer>
+  <footer class="site-footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark" aria-hidden="true">◆</span> GigTrack</a>
+        <p class="muted">Live music, tracked. Discover shows, grab tickets, relive the night.</p>
+        <div class="socials" aria-label="Social media">
+          <a href="https://instagram.com/gigtrack" aria-label="Instagram" title="@gigtrack">📷</a>
+          <a href="https://x.com/gigtrack" aria-label="X" title="@gigtrack">𝕏</a>
+          <a href="https://facebook.com/gigtrack" aria-label="Facebook" title="/gigtrack">📘</a>
+          <a href="https://tiktok.com/@gigtrack" aria-label="TikTok" title="@gigtrack">🎵</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Discover</h4>
+        <a href="{{ url_for('browse') }}">Concerts</a>
+        <a href="{{ url_for('browse') }}">Trending</a>
+        <a href="{{ url_for('signup') }}">Create account</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="{{ url_for('info_page', page='about') }}">About</a>
+        <a href="{{ url_for('info_page', page='careers') }}">Careers</a>
+        <a href="{{ url_for('info_page', page='contact') }}">Contact us</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="{{ url_for('info_page', page='help') }}">Help Centre</a>
+        <a href="{{ url_for('info_page', page='terms') }}">Terms</a>
+        <a href="{{ url_for('info_page', page='privacy') }}">Privacy</a>
+      </div>
+    </div>
+    <div class="footer-bar">
+      <small>© 2026 GigTrack. All rights reserved.</small>
+      <small class="muted">Made for music fans worldwide.</small>
+    </div>
+  </footer>
 </body>
 </html>
