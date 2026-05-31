@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Admin — GigTrack{% endblock %}
+{% block content %}
+  <h1>Admin dashboard</h1>
+  <p class="muted">Manage concerts, ticket tiers, and user accounts.</p>
+
+  <ul class="stat-row">
+    <li><strong>{{ stats.users }}</strong><span class="muted">users ({{ stats.disabled_users }} disabled)</span></li>
+    <li><strong>{{ stats.concerts }}</strong><span class="muted">concerts</span></li>
+    <li><strong>{{ stats.bookings }}</strong><span class="muted">confirmed bookings</span></li>
+    <li><strong>${{ '%.2f'|format(stats.revenue) }}</strong><span class="muted">revenue</span></li>
+  </ul>
+
+  <p>
+    <a class="btn-primary" href="{{ url_for('admin_concerts') }}">Manage concerts</a>
+    <a class="btn-ghost" href="{{ url_for('admin_users') }}">Manage users</a>
+  </p>
+{% endblock %}

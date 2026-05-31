@@ -1,12 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Sign up — GigTrack{% endblock %}
 {% block content %}
-  <h1>Sign up</h1>
-  <form method="post" class="stack">
-    <input name="username" placeholder="Username" required>
-    <input type="email" name="email" placeholder="Email" required>
-    <input type="password" name="password" placeholder="Password" required>
-    <input name="home_city" placeholder="Home city (optional)">
-    <button>Create account</button>
-  </form>
+  <div class="auth-card">
+    <h1>Sign up</h1>
+    <form method="post" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="username" placeholder="Username" required>
+      <input type="email" name="email" placeholder="Email" required>
+      <input type="password" name="password" placeholder="Password" required>
+      <input name="home_city" placeholder="Home city (optional)">
+      <button>Create account</button>
+    </form>
+    <p class="muted">Already have an account? <a href="{{ url_for('login') }}">Log in</a>.</p>
+  </div>
 {% endblock %}

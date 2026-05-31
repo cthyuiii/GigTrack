@@ -2,24 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}GigTrack{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header>
+  <header class="site-header">
     <nav>
-      <a class="brand" href="{{ url_for('home') }}">GigTrack</a>
-      <form class="search" method="get" action="{{ url_for('home') }}">
-        <input name="city" placeholder="Filter by city" value="{{ request.args.get('city','') }}">
+      <a class="brand" href="{{ url_for('home') }}">
+        <span class="brand-mark" aria-hidden="true">◆</span> GigTrack
+      </a>
+      <a class="nav-link" href="{{ url_for('browse') }}">Concerts</a>
+
+      <form class="search" method="get" action="{{ url_for('browse') }}">
+        <span class="search-pin" aria-hidden="true">📍</span>
+        <select name="city" onchange="this.form.submit()" aria-label="Filter by city">
+          <option value="">All cities</option>
+          {% for c in cities %}
+            <option value="{{ c }}" {% if request.args.get('city') == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
       </form>
+
       <div class="nav-right">
         {% if g.user %}
-          <span>Hey, {{ g.user.username }}</span>
-          <a href="{{ url_for('my_bookings') }}">My bookings</a>
-          <a href="{{ url_for('logout') }}">Log out</a>
+          {% if g.user.is_admin %}<a class="nav-link" href="{{ url_for('admin_home') }}">Admin</a>{% endif %}
+          <a class="nav-link" href="{{ url_for('my_bookings') }}">My bookings</a>
+          <a class="nav-link" href="{{ url_for('profile') }}">Hey, {{ g.user.username }}</a>
+          <a class="nav-link" href="{{ url_for('logout') }}">Log out</a>
         {% else %}
-          <a href="{{ url_for('login') }}">Log in</a>
-          <a href="{{ url_for('signup') }}">Sign up</a>
+          <a class="nav-link" href="{{ url_for('login') }}">Log in</a>
+          <a class="btn-primary btn-sm" href="{{ url_for('signup') }}">Sign up</a>
         {% endif %}
       </div>
     </nav>
@@ -34,6 +47,6 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
-  <footer><small>GigTrack · INF2003 demo · MySQL + MongoDB + Redis</small></footer>
+  <footer><small>GigTrack · INF2003 demo · MySQL + MongoDB + Redis + MinIO</small></footer>
 </body>
 </html>

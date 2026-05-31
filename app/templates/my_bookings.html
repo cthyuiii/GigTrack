@@ -20,6 +20,7 @@
               {% if b.status == 'confirmed' %}
                 <form method="post" action="{{ url_for('cancel_booking', booking_id=b.booking_id) }}"
                       onsubmit="return confirm('Cancel this booking and release the seats?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit">Cancel</button>
                 </form>
               {% endif %}

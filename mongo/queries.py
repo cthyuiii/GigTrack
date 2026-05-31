@@ -111,6 +111,65 @@ def add_song_to_setlist(concert_id, song):
     )
 
 
+# ---- Advanced aggregation -----------------------------------------------
+
+def review_dashboard():
+    """$facet — compute several independent analytics in ONE pass over reviews.
+
+    Returns rating distribution, top tags, and overall stats together. $facet
+    is the document-DB answer to running multiple GROUP BYs at once; the SQL
+    equivalent would be several separate queries or UNIONs.
+    """
+    pipeline = [
+        {"$facet": {
+            "rating_distribution": [
+                {"$group": {"_id": "$rating", "n": {"$sum": 1}}},
+                {"$sort": {"_id": -1}},
+            ],
+            "top_tags": [
+                {"$unwind": "$tags"},
+                {"$group": {"_id": "$tags", "n": {"$sum": 1}}},
+                {"$sort": {"n": -1}},
+                {"$limit": 5},
+            ],
+            "overall": [
+                {"$group": {"_id": None,
+                            "avg_rating": {"$avg": "$rating"},
+                            "total_reviews": {"$sum": 1},
+                            "total_likes": {"$sum": "$helpful_count"}}},
+            ],
+        }},
+    ]
+    return list(db.reviews.aggregate(pipeline))
+
+
+def concerts_with_setlist_and_reviews(min_rating=4):
+    """$lookup — join reviews to their setlist by concert_id (a NoSQL join).
+
+    Demonstrates that MongoDB can relate collections server-side; we attach each
+    concert's setlist to its highly-rated reviews and project a compact summary.
+    """
+    pipeline = [
+        {"$match": {"rating": {"$gte": min_rating}}},
+        {"$lookup": {
+            "from": "setlists",
+            "localField": "concert_id",
+            "foreignField": "concert_id",
+            "as": "setlist",
+        }},
+        {"$addFields": {
+            "song_count": {"$size": {"$ifNull": [
+                {"$arrayElemAt": ["$setlist.songs", 0]}, []]}},
+        }},
+        {"$project": {
+            "_id": 0, "concert_id": 1, "rating": 1, "title": 1, "song_count": 1,
+        }},
+        {"$sort": {"rating": -1, "concert_id": 1}},
+        {"$limit": 20},
+    ]
+    return list(db.reviews.aggregate(pipeline))
+
+
 if __name__ == "__main__":
     import json
     from bson import ObjectId
@@ -128,3 +187,9 @@ if __name__ == "__main__":
 
     print("\n== setlist_summary(concert_id=6) ==")
     print(json.dumps(setlist_summary(6), default=jdefault, indent=2))
+
+    print("\n== review_dashboard ($facet) ==")
+    print(json.dumps(review_dashboard(), default=jdefault, indent=2))
+
+    print("\n== concerts_with_setlist_and_reviews ($lookup) ==")
+    print(json.dumps(concerts_with_setlist_and_reviews(), default=jdefault, indent=2))

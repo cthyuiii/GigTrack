@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}GigTrack — live music, tracked{% endblock %}
+{% block content %}
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Find your next <span class="grad">live show</span>.</h1>
+      <p class="muted">Track upcoming concerts, book tickets, and read fan setlists &amp; reviews — all in one place.</p>
+
+      <form class="hero-search" method="get" action="{{ url_for('browse') }}">
+        <span class="search-pin" aria-hidden="true">📍</span>
+        <select name="city" aria-label="City">
+          <option value="">All cities</option>
+          {% for c in cities %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit">Search <span class="arrow" aria-hidden="true">→</span></button>
+      </form>
+
+      {% if stats %}
+        <ul class="stat-row">
+          <li><strong>{{ stats.concerts }}</strong><span class="muted">upcoming shows</span></li>
+          <li><strong>{{ stats.artists }}</strong><span class="muted">artists</span></li>
+          <li><strong>{{ stats.cities }}</strong><span class="muted">cities</span></li>
+        </ul>
+      {% endif %}
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2><span class="live-dot" aria-hidden="true"></span> Trending now</h2>
+      <a href="{{ url_for('browse') }}">See all →</a>
+    </div>
+    {% if not featured %}
+      <p class="muted">No upcoming concerts yet.</p>
+    {% endif %}
+    <ul class="cards">
+      {% for c in featured %}
+        <li class="card reveal" style="--i: {{ loop.index0 }}">
+          <a class="card-imgwrap" href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">
+            <div class="card-img" {% if c.headliner_image %}style="background-image:url('{{ c.headliner_image }}')"{% endif %}></div>
+          </a>
+          <a class="card-title" href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">{{ c.title }}</a>
+          <p>{{ c.headliner }} <span class="muted">· {{ c.genre or '' }}</span></p>
+          <p class="muted">📍 {{ c.venue }}, {{ c.city }}</p>
+          <p class="muted">🗓 {{ c.concert_date.strftime('%a %d %b %Y · %H:%M') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}</p>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endblock %}

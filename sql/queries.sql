@@ -151,3 +151,87 @@ SELECT c.concert_id, c.title, c.concert_date, c.status,
 FROM   concerts c
 JOIN   venues  v ON v.venue_id  = c.venue_id
 JOIN   artists a ON a.artist_id = c.headline_artist_id;
+
+-- ------------------------------------------------------------
+-- (G) Window functions — ranking & running totals (MySQL 8.0+)
+-- ------------------------------------------------------------
+
+-- G1. Rank concerts by revenue WITHIN each city (partitioned window).
+--     RANK() lets us answer "top earner per city" without a self-join.
+SELECT *
+FROM (
+    SELECT v.city, c.concert_id, c.title,
+           COALESCE(SUM(b.total_price), 0) AS revenue,
+           RANK() OVER (PARTITION BY v.city
+                        ORDER BY COALESCE(SUM(b.total_price), 0) DESC) AS city_rank
+    FROM   concerts c
+    JOIN   venues   v ON v.venue_id  = c.venue_id
+    LEFT   JOIN tickets  t ON t.concert_id = c.concert_id
+    LEFT   JOIN bookings b ON b.ticket_id  = t.ticket_id AND b.status = 'confirmed'
+    GROUP  BY v.city, c.concert_id, c.title
+) ranked
+WHERE city_rank <= 3
+ORDER BY city, city_rank;
+
+-- G2. Running cumulative revenue over time (frame from start to current row).
+SELECT b.booking_id, b.booked_at, b.total_price,
+       SUM(b.total_price) OVER (ORDER BY b.booked_at
+                                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                AS cumulative_revenue
+FROM   bookings b
+WHERE  b.status = 'confirmed'
+ORDER  BY b.booked_at;
+
+-- ------------------------------------------------------------
+-- (H) Common Table Expression (CTE) — readable multi-step query
+-- ------------------------------------------------------------
+
+-- H1. Artists whose average headliner-show rating beats the global average.
+--     (rating data lives in Mongo; here we assume an app-side sync table, but
+--      the pattern stands: CTEs name intermediate results for clarity.)
+WITH concert_revenue AS (
+    SELECT c.concert_id, c.headline_artist_id,
+           COALESCE(SUM(b.total_price), 0) AS revenue
+    FROM   concerts c
+    LEFT   JOIN tickets  t ON t.concert_id = c.concert_id
+    LEFT   JOIN bookings b ON b.ticket_id  = t.ticket_id AND b.status = 'confirmed'
+    GROUP  BY c.concert_id, c.headline_artist_id
+),
+artist_totals AS (
+    SELECT headline_artist_id AS artist_id,
+           SUM(revenue)  AS total_revenue,
+           COUNT(*)      AS shows
+    FROM   concert_revenue
+    GROUP  BY headline_artist_id
+)
+SELECT a.name, at.shows, at.total_revenue,
+       ROUND(at.total_revenue / NULLIF(at.shows, 0), 2) AS avg_per_show
+FROM   artist_totals at
+JOIN   artists a ON a.artist_id = at.artist_id
+WHERE  at.total_revenue > (SELECT AVG(total_revenue) FROM artist_totals)
+ORDER  BY at.total_revenue DESC;
+
+-- ------------------------------------------------------------
+-- (I) Explicit transaction — atomic multi-statement money move
+-- ------------------------------------------------------------
+
+-- I1. Refund a booking atomically: mark refunded AND log it. Either both
+--     succeed or neither does. (The seat-restore is handled by the existing
+--     AFTER UPDATE trigger when status changes.)
+START TRANSACTION;
+  UPDATE bookings SET status = 'refunded' WHERE booking_id = 2 AND status = 'confirmed';
+  -- imagine an audit_log insert here; if it failed we ROLLBACK instead:
+  -- INSERT INTO audit_log (...) VALUES (...);
+COMMIT;
+
+-- ------------------------------------------------------------
+-- (J) EXPLAIN — show the optimizer using our indexes
+-- ------------------------------------------------------------
+
+-- J1. Confirms idx_concerts_status_date is used for the home/trending query.
+EXPLAIN
+SELECT c.concert_id, c.title
+FROM   concerts c
+WHERE  c.status = 'scheduled'
+ORDER  BY c.concert_date
+LIMIT  20;

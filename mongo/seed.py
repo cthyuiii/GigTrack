@@ -13,12 +13,19 @@ a user created during the session. It only drops + reseeds when --force /
 SEED_FORCE=1 is given.
 """
 import os
+import random
 import sys
 from datetime import datetime, timezone
 from pymongo import MongoClient, ASCENDING, DESCENDING, TEXT
 
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 FORCE = "--force" in sys.argv or os.environ.get("SEED_FORCE") == "1"
+
+# Mirror the counts in scripts/generate_seed.py so the logical FKs line up.
+NUM_USERS    = 21
+NUM_ARTISTS  = 30
+NUM_CONCERTS = 50
+rng = random.Random(20260530)
 
 client = MongoClient(MONGO_URI)
 db = client["gigtrack"]
@@ -39,87 +46,83 @@ for coll in COLLECTIONS:
     db[coll].drop()
 
 # ---- setlists -----------------------------------------------------------
-setlists = [
-    {
-        "concert_id": 6,                       # Habitat 67 in Singapore (completed)
-        "submitted_by_user_id": 1,
-        "source": "fan",
-        "songs": [
-            {"order": 1, "title": "Frozen Lake",       "duration_sec": 245, "encore": False, "cover_of": None},
-            {"order": 2, "title": "Carbon Maps",       "duration_sec": 198, "encore": False, "cover_of": None, "notes": "Acoustic intro"},
-            {"order": 3, "title": "Sodium Lights",     "duration_sec": 312, "encore": False, "cover_of": None},
-            {"order": 4, "title": "Hallelujah",        "duration_sec": 410, "encore": False, "cover_of": "Leonard Cohen"},
-            {"order": 5, "title": "Boreal",            "duration_sec": 287, "encore": False, "cover_of": None},
-        ],
-        "encore_songs": [
-            {"order": 1, "title": "Old Pine", "duration_sec": 220, "cover_of": None},
-        ],
-        "total_duration_sec": 1672,
-        "submitted_at": datetime(2026, 5, 2, 23, 5, tzinfo=timezone.utc),
-        "upvotes": 14,
-    },
-    {
-        "concert_id": 1,                       # Midnight Lanterns — upcoming, no setlist yet
-        "submitted_by_user_id": None,
-        "source": "predicted",
-        "songs": [],
-        "encore_songs": [],
-        "total_duration_sec": 0,
-        "submitted_at": None,
-        "upvotes": 0,
-    },
-]
+# A setlist for roughly every other concert; lengths and covers vary, which is
+# exactly the variable-shape data that motivates the document model.
+SONG_WORDS = ["Frozen", "Carbon", "Sodium", "Boreal", "Neon", "Glass", "Velvet",
+              "Echoes", "Midnight", "Harbour", "Static", "Bloom", "Drift", "Pulse"]
+COVERS = [None, None, None, "Leonard Cohen", "Fleetwood Mac", "Radiohead", "Prince"]
+
+setlists = []
+for cid in range(1, NUM_CONCERTS + 1):
+    if rng.random() < 0.5:
+        continue
+    n = rng.randint(8, 22)
+    songs = [{"order": i + 1, "title": f"{rng.choice(SONG_WORDS)} {rng.choice(SONG_WORDS)}",
+              "duration_sec": rng.randint(150, 400), "encore": False,
+              "cover_of": rng.choice(COVERS)} for i in range(n)]
+    encore = [{"order": i + 1, "title": f"{rng.choice(SONG_WORDS)} (encore)",
+               "duration_sec": rng.randint(180, 360), "cover_of": None}
+              for i in range(rng.randint(0, 2))]
+    setlists.append({
+        "concert_id": cid,
+        "submitted_by_user_id": rng.randint(1, NUM_USERS),
+        "source": rng.choice(["fan", "fan", "official", "predicted"]),
+        "songs": songs,
+        "encore_songs": encore,
+        "total_duration_sec": sum(s["duration_sec"] for s in songs + encore),
+        "submitted_at": datetime(2026, rng.randint(1, 5), rng.randint(1, 28),
+                                 22, 0, tzinfo=timezone.utc),
+        "upvotes": rng.randint(0, 40),
+    })
 db.setlists.insert_many(setlists)
 
 # ---- reviews ------------------------------------------------------------
-reviews = [
-    {
-        "concert_id": 6, "user_id": 1, "rating": 5,
-        "title": "Heart-on-sleeve gig, sound was crisp",
-        "body": "Habitat 67 sounded incredible at the Esplanade. The encore took the roof off.",
-        "tags": ["acoustic", "sound-quality", "intimate"],
-        "photos": [
-            {"url": "/static/uploads/r1_a.jpg", "caption": "Stage from balcony"},
-        ],
-        "helpful_count": 12,
-        "posted_at": datetime(2026, 5, 3, 9, 14, tzinfo=timezone.utc),
-    },
-    {
-        "concert_id": 6, "user_id": 2, "rating": 4,
-        "title": "Great show, drinks line was brutal",
-        "body": "Setlist was strong but bar queues ate the support act. Bring water.",
-        "tags": ["logistics", "support-act"],
+TITLES = ["Unreal energy", "Sound was crisp", "Worth every cent", "A bit flat",
+          "Crowd went off", "Encore took the roof off", "Mixed feelings",
+          "Best gig this year", "Logistics were rough", "Pure magic"]
+BODIES = ["The mix was clean and the lighting design was stunning.",
+          "Great setlist but the bar queues were brutal — bring water.",
+          "Support act stole the show honestly.",
+          "Sound bled a bit at the back but the energy made up for it.",
+          "Tight performance, no filler, straight bangers.",
+          "Venue was packed; arrive early for a good spot."]
+TAGS = ["sound-quality", "crowd", "lights", "logistics", "support-act",
+        "setlist", "intimate", "value", "acoustic"]
+
+reviews = []
+for _ in range(220):
+    cid = rng.randint(1, NUM_CONCERTS)
+    rating = rng.choices([5, 4, 3, 2, 1], weights=[40, 30, 18, 8, 4])[0]
+    likers = rng.sample(range(1, NUM_USERS + 1), rng.randint(0, 8))
+    reviews.append({
+        "concert_id": cid,
+        "user_id": rng.randint(1, NUM_USERS),
+        "rating": rating,
+        "title": rng.choice(TITLES),
+        "body": rng.choice(BODIES),
+        "tags": rng.sample(TAGS, rng.randint(1, 3)),
         "photos": [],
-        "helpful_count": 3,
-        "posted_at": datetime(2026, 5, 3, 11, 2, tzinfo=timezone.utc),
-    },
-]
+        "liked_by": likers,
+        "helpful_count": len(likers),
+        "posted_at": datetime(2026, rng.randint(1, 5), rng.randint(1, 28),
+                              rng.randint(0, 23), rng.randint(0, 59), tzinfo=timezone.utc),
+    })
 db.reviews.insert_many(reviews)
 
-# ---- artist_bios --------------------------------------------------------
-bios = [
-    {
-        "artist_id": 1, "bio_text": "Manchester-formed indie rock quartet known for cinematic builds.",
-        "tour_history": [
-            {"year": 2024, "name": "Lantern Light EU Tour", "regions": ["EU"]},
-            {"year": 2026, "name": "Asia Tour 2026",        "regions": ["ASIA"]},
-        ],
-        "social": {"instagram": "@midnight_lanterns", "spotify_id": "1AbCdEf"},
-        "related_artists": [6, 5],
-    },
-    {
-        "artist_id": 4, "bio_text": "Singapore-born pop vocalist. Two-time Asia Pop Award nominee.",
-        "tour_history": [{"year": 2025, "name": "Glow Tour", "regions": ["ASIA"]}],
-        "social": {"instagram": "@nadiahsg", "spotify_id": "9XYZ123"},
-        "related_artists": [2],
-    },
-    {
-        "artist_id": 6, "bio_text": "Montréal indie-folk duo. Heavy harmonies and pedal steel.",
-        "tour_history": [{"year": 2026, "name": "Sodium Lights Tour", "regions": ["NA", "ASIA"]}],
-        "social": {"instagram": "@habitat67band"},
-        "related_artists": [1],
-    },
-]
+# ---- artist_bios (one per artist) ---------------------------------------
+REGIONS = ["NA", "EU", "ASIA", "OCE"]
+bios = []
+for aid in range(1, NUM_ARTISTS + 1):
+    related = [x for x in rng.sample(range(1, NUM_ARTISTS + 1), 3) if x != aid][:2]
+    bios.append({
+        "artist_id": aid,
+        "bio_text": f"Touring act #{aid}, known for a distinctive live sound and a loyal fanbase.",
+        "tour_history": [{"year": y, "name": f"Tour {y}",
+                          "regions": rng.sample(REGIONS, rng.randint(1, 3))}
+                         for y in rng.sample([2022, 2023, 2024, 2025, 2026], rng.randint(1, 3))],
+        "social": {"instagram": f"@artist{aid:02d}", "spotify_id": f"sp{aid:04d}"},
+        "related_artists": related,
+    })
 db.artist_bios.insert_many(bios)
 
 # ---- indexes ------------------------------------------------------------

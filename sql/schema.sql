@@ -20,6 +20,8 @@ CREATE TABLE users (
   email         VARCHAR(120) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   home_city     VARCHAR(80),
+  is_admin      TINYINT(1) NOT NULL DEFAULT 0,   -- admin dashboard access
+  is_active     TINYINT(1) NOT NULL DEFAULT 1,   -- 0 = disabled, can't log in
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_users_city (home_city)
 ) ENGINE=InnoDB;

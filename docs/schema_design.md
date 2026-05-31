@@ -6,7 +6,7 @@ Used for **transactional, structured data with clear referential integrity**: id
 
 | Table | Purpose | Notable relationships |
 |---|---|---|
-| `users` | Account info | 1:N → bookings, follows, reviews |
+| `users` | Account info (+ `is_admin`, `is_active` flags for the admin dashboard / account disabling) | 1:N → bookings, follows, reviews |
 | `artists` | Performing acts | 1:N → concerts (as headliner); M:N ↔ concerts via `concert_artists` |
 | `venues` | Physical locations | 1:N → concerts |
 | `concerts` | A show at a venue on a date | M:N ↔ artists; 1:N → tickets |
@@ -62,7 +62,7 @@ Justification: setlist length varies wildly (10–40 songs), each song has optio
   "posted_at": "2026-03-15T09:14:00Z"
 }
 ```
-Justification: photo arrays and tag arrays are variable-length; body is unstructured text we may want full-text search on later.
+Justification: photo arrays and tag arrays are variable-length; body is unstructured text we may want full-text search on later. Likes are stored as a `liked_by: [user_id]` set and toggled with `$addToSet` / `$pull`, so the helpful-count is derived (`len(liked_by)`) and a user can never be double-counted — the document model makes this a single atomic update with no join table.
 
 ### `artist_bios` collection
 ```json

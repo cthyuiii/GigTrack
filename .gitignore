@@ -11,3 +11,4 @@ venv/
 
 # OS / editor
 .DS_Store
+scripts/make_benchmark_slide.py

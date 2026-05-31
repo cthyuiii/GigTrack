@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}My profile — GigTrack{% endblock %}
+{% block content %}
+  <div class="auth-card">
+    <h1>My profile</h1>
+    <form method="post" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="muted">Username
+        <input name="username" value="{{ g.user.username }}" required>
+      </label>
+      <label class="muted">Email <span class="muted">(read-only)</span>
+        <input value="{{ g.user.email }}" disabled>
+      </label>
+      <label class="muted">Home city
+        <input name="home_city" value="{{ g.user.home_city or '' }}" placeholder="e.g. Singapore">
+      </label>
+      <button>Save changes</button>
+    </form>
+    {% if g.user.is_admin %}<p class="muted">You have admin access — <a href="{{ url_for('admin_home') }}">open dashboard</a>.</p>{% endif %}
+  </div>
+{% endblock %}

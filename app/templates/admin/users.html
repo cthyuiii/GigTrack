@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Admin · Users — GigTrack{% endblock %}
+{% block content %}
+  <h1>Users</h1>
+  <p class="muted"><a href="{{ url_for('admin_home') }}">← Back to dashboard</a></p>
+
+  <table>
+    <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>City</th><th>Admin</th><th>Active</th><th></th></tr></thead>
+    <tbody>
+      {% for u in users %}
+        <tr>
+          <td>{{ u.user_id }}</td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.home_city or '—' }}</td>
+          <td>{{ '✓' if u.is_admin else '' }}</td>
+          <td>{{ '✓' if u.is_active else '✗' }}</td>
+          <td class="row-actions">
+            <a href="{{ url_for('admin_user_edit', user_id=u.user_id) }}">Edit</a>
+            {% if u.user_id != g.user.user_id %}
+              <form method="post" action="{{ url_for('admin_user_delete', user_id=u.user_id) }}"
+                    onsubmit="return confirm('Delete this user?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="ghost danger">Delete</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ artist.name }} — GigTrack{% endblock %}
 {% block content %}
-  <h1>{{ artist.name }}</h1>
-  <p class="muted">{{ artist.genre }} · {{ artist.country }}</p>
-
-  {% if g.user %}
-    <form method="post" action="{{ url_for('toggle_follow', artist_id=artist.artist_id) }}">
-      <button>{{ 'Unfollow' if is_following else 'Follow' }}</button>
-    </form>
-  {% endif %}
+  <div class="concert-head">
+    {% if artist.image_url %}
+      <div class="concert-img" style="background-image:url('{{ artist.image_url }}')"></div>
+    {% endif %}
+    <div>
+      <h1>{{ artist.name }}</h1>
+      <p class="muted">{{ artist.genre }} · {{ artist.country }}</p>
+      {% if g.user %}
+        <form method="post" action="{{ url_for('toggle_follow', artist_id=artist.artist_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button>{{ 'Unfollow' if is_following else 'Follow' }}</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
 
   {% if bio %}
     <section>
