@@ -47,10 +47,12 @@ BENCH_KEY = "bench:trending"
 
 def measure(fn, iterations):
     samples = []
+    cpu0 = time.process_time()        # CPU time consumed by THIS process
     for _ in range(iterations):
         t0 = time.perf_counter()
         fn()
         samples.append((time.perf_counter() - t0) * 1000.0)
+    cpu_total_ms = (time.process_time() - cpu0) * 1000.0
     samples.sort()
     n = len(samples)
     def pct(p):
@@ -62,8 +64,32 @@ def measure(fn, iterations):
         "p95_ms":  round(pct(0.95), 4),
         "p99_ms":  round(pct(0.99), 4),
         "ops_per_sec": round(1000.0 / avg, 1) if avg else 0,
+        # CPU ms per call: how much processor time (not wall time) each call
+        # cost the client. Wall>CPU means the call spent time waiting on the DB
+        # /network rather than computing locally.
+        "cpu_ms": round(cpu_total_ms / n, 4) if n else 0,
         "iterations": n,
     }
+
+
+def _resource_usage():
+    """(avg_cpu_percent_or_None, peak_rss_MB). Uses psutil if installed,
+    otherwise falls back to the stdlib resource module (Unix)."""
+    try:
+        import psutil
+        p = psutil.Process()
+        p.cpu_percent(None)            # prime the measurement
+        cpu = p.cpu_percent(0.3)
+        return cpu, p.memory_info().rss / (1024 * 1024)
+    except Exception:
+        try:
+            import resource, sys as _s
+            ru = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # ru_maxrss: bytes on macOS, kilobytes on Linux.
+            rss_mb = ru / (1024 * 1024) if _s.platform == "darwin" else ru / 1024
+            return None, rss_mb
+        except Exception:
+            return None, 0.0
 
 
 def main():
@@ -98,23 +124,34 @@ def main():
 
     redis_client.delete(BENCH_KEY)
 
+    # ---- resource usage snapshot ----
+    cpu_pct, rss_mb = _resource_usage()
+
     # ---- print ----
     print(f"\nGigTrack benchmark — {it} iterations each\n")
-    hdr = f"{'scenario':32s} {'avg':>9s} {'p50':>9s} {'p95':>9s} {'p99':>9s} {'ops/s':>10s}"
+    hdr = (f"{'scenario':32s} {'avg':>9s} {'p50':>9s} {'p95':>9s} "
+           f"{'p99':>9s} {'cpu/call':>9s} {'ops/s':>10s}")
     print(hdr); print("-" * len(hdr))
     for name, m in scenarios.items():
         print(f"{name:32s} {m['avg_ms']:9.3f} {m['p50_ms']:9.3f} "
-              f"{m['p95_ms']:9.3f} {m['p99_ms']:9.3f} {m['ops_per_sec']:10.1f}")
+              f"{m['p95_ms']:9.3f} {m['p99_ms']:9.3f} {m['cpu_ms']:9.4f} "
+              f"{m['ops_per_sec']:10.1f}")
+    print(f"\nClient process: peak memory ≈ {rss_mb:.1f} MB"
+          + (f", avg CPU ≈ {cpu_pct:.1f}%" if cpu_pct is not None else ""))
 
     # ---- CSV ----
     with open(CSV_PATH, "w", newline="") as fh:
         wtr = csv.writer(fh)
         wtr.writerow(["scenario", "iterations", "avg_ms", "p50_ms",
-                      "p95_ms", "p99_ms", "ops_per_sec"])
+                      "p95_ms", "p99_ms", "cpu_ms", "ops_per_sec"])
         for name, m in scenarios.items():
             wtr.writerow([name, m["iterations"], m["avg_ms"], m["p50_ms"],
-                          m["p95_ms"], m["p99_ms"], m["ops_per_sec"]])
-    print(f"\nWrote {CSV_PATH}")
+                          m["p95_ms"], m["p99_ms"], m["cpu_ms"], m["ops_per_sec"]])
+        wtr.writerow([])
+        wtr.writerow(["peak_rss_mb", round(rss_mb, 1)])
+        if cpu_pct is not None:
+            wtr.writerow(["avg_cpu_percent", round(cpu_pct, 1)])
+    print(f"Wrote {CSV_PATH}")
 
     # ---- chart (optional) ----
     try:

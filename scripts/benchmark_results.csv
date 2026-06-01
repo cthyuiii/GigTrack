@@ -1,0 +1,13 @@
+scenario,iterations,avg_ms,p50_ms,p95_ms,p99_ms,cpu_ms,ops_per_sec
+MySQL trending (uncached),300,19.6506,18.9503,22.912,34.8783,9.248,50.9
+Redis cached,300,1.2526,1.1724,1.787,3.8184,0.2055,798.4
+MySQL indexed (status),300,19.2376,18.545,23.7662,31.2601,8.9786,52.0
+MySQL unindexed (base_price),300,20.2744,19.0255,24.3247,52.6583,9.1102,49.3
+Mongo indexed (concert_id),300,1.201,1.0027,1.8208,6.619,0.2751,832.7
+Mongo unindexed (rating),300,2.5295,1.972,5.0976,11.5138,0.7427,395.3
+MySQL payload LIMIT 5,300,22.9571,21.2116,35.3632,71.1174,9.8328,43.6
+MySQL payload LIMIT 20,300,20.5805,20.1646,24.2945,35.9435,9.6152,48.6
+MySQL payload LIMIT 50,300,21.9194,20.853,28.3363,43.5172,9.9607,45.6
+
+peak_rss_mb,39.4
+avg_cpu_percent,0.0

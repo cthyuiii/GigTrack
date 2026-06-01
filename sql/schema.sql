@@ -1,7 +1,8 @@
 -- ============================================================
--- GigTrack — MySQL schema
+-- GigTrack - MySQL schema
 -- Drop in order respecting FK dependencies
 -- ============================================================
+SET NAMES utf8mb4;
 DROP TRIGGER IF EXISTS trg_booking_decrement_seats;
 DROP TRIGGER IF EXISTS trg_booking_restore_seats_on_cancel;
 DROP TABLE IF EXISTS bookings;
