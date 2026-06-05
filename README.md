@@ -116,12 +116,119 @@ python scripts/fetch_artist_images.py  # real portraits → MinIO
 flask --app app/app.py run             # → http://localhost:5000
 ```
 
-> **Fully without Docker (advanced):** install MySQL 8, MongoDB 7, Redis 7 and
-> (optionally) MinIO natively, then point `.env` at whatever host/ports they use
-> (e.g. the native defaults `3306 / 27017 / 6379`). Create the `gigtrack`
-> database and load the SQL yourself:
-> `mysql -uroot -p gigtrack < sql/schema.sql && mysql -uroot -p gigtrack < sql/seed.sql`,
-> then run steps 3–5 above. `.env` is gitignored — never commit real secrets.
+## Run fully without Docker (native install)
+
+Install the four datastores natively, then run Flask against them. Commands are
+shown for **macOS (Homebrew)** and **Ubuntu/Debian (apt)**; Windows users can
+use the official installers linked at each step (or WSL2 with the apt commands).
+
+### 1. MySQL 8
+
+```bash
+# macOS
+brew install mysql && brew services start mysql
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y mysql-server && sudo systemctl enable --now mysql
+```
+Windows: MySQL Installer — <https://dev.mysql.com/downloads/installer/>
+
+Create the database + app user, then load the schema and seed:
+
+```bash
+# Opens a root shell (use the root password you set during install; on a fresh
+# Homebrew install root often has no password, so omit -p).
+mysql -uroot -p <<'SQL'
+CREATE DATABASE IF NOT EXISTS gigtrack CHARACTER SET utf8mb4;
+CREATE USER IF NOT EXISTS 'gigtrack'@'localhost' IDENTIFIED BY 'gigtrack_pw';
+GRANT ALL PRIVILEGES ON gigtrack.* TO 'gigtrack'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+
+# Load schema (tables + triggers) then the seed data:
+mysql -ugigtrack -pgigtrack_pw gigtrack < sql/schema.sql
+mysql -ugigtrack -pgigtrack_pw gigtrack < sql/seed.sql
+```
+
+### 2. MongoDB 7
+
+```bash
+# macOS
+brew tap mongodb/brew && brew install mongodb-community@7.0
+brew services start mongodb-community@7.0
+
+# Ubuntu/Debian — follow the official repo steps, then:
+sudo systemctl enable --now mongod
+```
+Install guide / Windows: <https://www.mongodb.com/docs/manual/installation/>
+(No manual seeding here — `mongo/seed.py` in step 5 populates it.)
+
+### 3. Redis 7
+
+```bash
+# macOS
+brew install redis && brew services start redis
+
+# Ubuntu/Debian
+sudo apt install -y redis-server && sudo systemctl enable --now redis-server
+```
+Windows: use WSL2, or Memurai (<https://www.memurai.com/>) as a Redis-compatible service.
+
+### 4. MinIO (object storage)
+
+```bash
+# macOS
+brew install minio/stable/minio
+MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin minio server ~/minio-data --console-address ":9001"
+
+# Linux
+wget https://dl.min.io/server/minio/release/linux-amd64/minio -O minio && chmod +x minio
+MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin ./minio server ~/minio-data --console-address ":9001"
+```
+This serves the S3 API on `:9000` and the console on `:9001`. Leave it running.
+(Optional: skip MinIO and set `S3_ENDPOINT=` empty in `.env` — reviews still
+post, just without photos, and artist cards show the gradient placeholder.)
+
+### 5. Point the app at the native services and run
+
+Native services use their **default ports**, which differ from the Docker-mapped
+ones, so set `.env` accordingly:
+
+```bash
+cp .env.example .env
+```
+Edit `.env` to the native defaults:
+
+```ini
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=gigtrack
+MYSQL_PASSWORD=gigtrack_pw
+MYSQL_DB=gigtrack
+MONGO_URI=mongodb://localhost:27017
+REDIS_URL=redis://localhost:6379/0
+S3_ENDPOINT=http://localhost:9000
+S3_PUBLIC_URL=http://localhost:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_BUCKET=gigtrack-media
+FLASK_SECRET=dev-secret-change-me
+```
+
+Then install Python deps, seed Mongo + MinIO, and start the app:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+export PYTHONPATH=$PWD/app                             # PowerShell: $env:PYTHONPATH="$PWD/app"
+python mongo/seed.py                    # seeds MongoDB collections
+python app/storage.py                   # creates the MinIO bucket
+python scripts/fetch_artist_images.py   # real portraits → MinIO
+flask --app app/app.py run              # → http://localhost:5000
+```
+
+`.env` is loaded automatically by every entry point (python-dotenv) and is
+gitignored — never commit real secrets.
 
 ## Project layout
 
