@@ -41,15 +41,32 @@ anything already running locally. **The app is on `5001`, not 5000.**
 | MinIO API | `localhost:9000` | `minio:9000` |
 | MinIO Console | <http://localhost:9001> (`minioadmin`/`minioadmin`) | `minio:9001` |
 
+## Prerequisites & installation
+
+You need **Docker** (it provides the four datastores). For the
+all-in-Docker run that's the only requirement; for the local-Flask run you also
+need **Python 3.11+**.
+
+**Install Docker Desktop** (includes Docker Compose):
+
+- macOS: <https://docs.docker.com/desktop/install/mac-install/> — or `brew install --cask docker`
+- Windows (WSL2): <https://docs.docker.com/desktop/install/windows-install/>
+- Linux: Docker Engine + Compose plugin — <https://docs.docker.com/engine/install/>
+
+Verify: `docker --version` and `docker compose version`.
+
+**Python (only for the local-Flask option):** 3.11+ from <https://www.python.org/downloads/>
+(macOS: `brew install python`). Verify: `python3 --version`.
+
 ## Quick start — all in Docker (recommended)
 
-No `.env` needed: `docker-compose.yml` injects every variable into the app
-container.
+The only prerequisite is Docker. No `.env` needed — `docker-compose.yml`
+injects every variable into the app container.
 
 ```bash
 docker compose up --build
 # First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
-open http://localhost:5001
+open http://localhost:5001          # Linux: xdg-open, Windows: start
 ```
 
 Sample logins (password is `password` for everyone):
@@ -73,51 +90,38 @@ Sample logins (password is `password` for everyone):
 
 ## Quick start — local Flask, datastores in Docker
 
-Run the datastores in Docker (they auto-seed), but run Flask on your machine.
+Run the datastores in Docker (they auto-seed) but run Flask on your machine for
+faster iteration. `.env.example` is already set to the remapped host ports, so
+just copy it — no edits needed.
 
 ```bash
 # 1. Start ONLY the datastores (MySQL auto-loads schema.sql + seed.sql).
 docker compose up -d mysql mongo redis minio
 
-# 2. Create your .env pointing at the remapped host ports.
+# 2. Copy the env file (no editing required — it matches the ports above).
 cp .env.example .env
-```
 
-Edit `.env` so the host ports match the table above:
-
-```ini
-MYSQL_HOST=localhost
-MYSQL_PORT=3307
-MYSQL_USER=gigtrack
-MYSQL_PASSWORD=gigtrack_pw
-MYSQL_DB=gigtrack
-MONGO_URI=mongodb://localhost:27018
-REDIS_URL=redis://localhost:6380/0
-S3_ENDPOINT=http://localhost:9000
-S3_PUBLIC_URL=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
-S3_BUCKET=gigtrack-media
-FLASK_SECRET=dev-secret-change-me
-```
-
-```bash
-# 3. Install deps; seed Mongo + create bucket + fetch artist photos.
-#    Every script loads .env automatically (python-dotenv).
+# 3. (Recommended) create a virtualenv, then install deps.
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-export PYTHONPATH=$PWD/app
+
+# 4. Seed Mongo + create the MinIO bucket + fetch artist photos.
+#    Every script loads .env automatically (python-dotenv).
+export PYTHONPATH=$PWD/app                            # Windows (PowerShell): $env:PYTHONPATH="$PWD/app"
 python mongo/seed.py
 python app/storage.py                  # creates the MinIO bucket
 python scripts/fetch_artist_images.py  # real portraits → MinIO
 
-# 4. Run the app (local Flask defaults to port 5000).
+# 5. Run the app (local Flask defaults to port 5000).
 flask --app app/app.py run             # → http://localhost:5000
 ```
 
-> `.env` is gitignored — never commit real secrets. If you instead run
-> MySQL/Mongo/Redis **natively** on default ports, use `.env.example` as-is
-> (3306 / 27017 / 6379) and load the SQL yourself:
-> `mysql -uroot -p gigtrack < sql/schema.sql && mysql -uroot -p gigtrack < sql/seed.sql`.
+> **Fully without Docker (advanced):** install MySQL 8, MongoDB 7, Redis 7 and
+> (optionally) MinIO natively, then point `.env` at whatever host/ports they use
+> (e.g. the native defaults `3306 / 27017 / 6379`). Create the `gigtrack`
+> database and load the SQL yourself:
+> `mysql -uroot -p gigtrack < sql/schema.sql && mysql -uroot -p gigtrack < sql/seed.sql`,
+> then run steps 3–5 above. `.env` is gitignored — never commit real secrets.
 
 ## Project layout
 
