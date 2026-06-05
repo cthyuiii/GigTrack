@@ -11,10 +11,10 @@ Measures several dimensions, not just one, and writes machine-readable output:
   6. MongoDB UN-indexed find (rating)     — no index, collection scan
   7. Payload scaling (LIMIT 5 / 20 / 50)  — latency vs result size
 
-For each it reports avg / p50 / p95 / p99 latency and throughput (ops/sec),
-writes scripts/benchmark_results.csv, and (if matplotlib is installed) a bar
-chart scripts/benchmark_latency.png. Build a slide from the CSV with
-scripts/make_benchmark_slide.py.
+For each it reports avg / p50 / p95 / p99 latency, throughput (ops/sec) and
+CPU time per call, plus peak memory for the run. Writes
+scripts/benchmark_results.csv and (if matplotlib is installed) a bar chart
+scripts/benchmark_latency.png.
 
 Run (stack up + seeded):
     PYTHONPATH=app python scripts/benchmark.py --iterations 300

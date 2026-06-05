@@ -39,8 +39,24 @@ app.config.update(
 
 log = logging.getLogger("gigtrack")
 
-CACHE_TTL_SECONDS = 60
-TRENDING_TTL      = 5 * 60
+TRENDING_TTL = 5 * 60   # seconds; TTL for cached browse/listing payloads
+
+# Max tickets one customer may hold per concert (across all tiers).
+MAX_TICKETS_PER_CONCERT = 6
+
+
+def booked_qty_for_concert(user_id, concert_id):
+    """Sum of a user's CONFIRMED ticket quantities for one concert (all tiers)."""
+    row = query_one(
+        """
+        SELECT COALESCE(SUM(b.quantity), 0) AS qty
+        FROM   bookings b
+        JOIN   tickets  t ON t.ticket_id = b.ticket_id
+        WHERE  b.user_id = %s AND t.concert_id = %s AND b.status = 'confirmed'
+        """,
+        (user_id, concert_id),
+    )
+    return int(row["qty"]) if row else 0
 
 # Review-photo upload limits.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024     # 5 MB per image
@@ -237,12 +253,34 @@ def logout():
 # Browse
 # ============================================================
 
+def _decorate_concerts(rows):
+    """Add display-ready date fields (date_day / date_mon / date_full) to each
+    concert row so templates stay simple. Handles both a real datetime (fresh
+    from MySQL) and a string (when the row came back from the Redis JSON cache).
+    """
+    for r in rows:
+        d = r.get("concert_date")
+        if not isinstance(d, datetime):
+            try:
+                d = datetime.strptime(str(d), "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                d = None
+        if d:
+            r["date_day"] = d.strftime("%d")
+            r["date_mon"] = d.strftime("%b").upper()
+            r["date_full"] = d.strftime("%a %d %b %Y · %H:%M")
+        else:
+            r["date_day"] = r["date_mon"] = ""
+            r["date_full"] = str(r.get("concert_date") or "")
+    return rows
+
+
 @app.route("/")
 def home():
-    """Landing page — hero + a few trending concerts + headline stats."""
+    """Landing page — full-width hero, featured grid, category tiles, rail."""
     flush_view_counts()
 
-    featured = query_all(
+    featured = _decorate_concerts(query_all(
         """
         SELECT c.concert_id, c.title, c.concert_date, c.view_count,
                v.name AS venue, v.city,
@@ -252,55 +290,71 @@ def home():
         JOIN   artists a ON a.artist_id = c.headline_artist_id
         WHERE  c.status = 'scheduled' AND c.concert_date > NOW()
         ORDER  BY c.view_count DESC, c.concert_date ASC
-        LIMIT  6
+        LIMIT  14
         """
-    )
-    stats = query_one(
-        """
-        SELECT (SELECT COUNT(*) FROM concerts WHERE status='scheduled') AS concerts,
-               (SELECT COUNT(*) FROM artists)                            AS artists,
-               (SELECT COUNT(DISTINCT city) FROM venues)                 AS cities
-        """
-    )
-    return render_template("landing.html", featured=featured, stats=stats)
+    ))
+    hero = featured[0] if featured else None      # biggest banner
+    spotlight = featured[1:5]                       # smaller featured cards
+    rail = featured[5:]                             # horizontal "trending" row
+    return render_template("landing.html", hero=hero, spotlight=spotlight,
+                           rail=rail, genres=get_genres())
+
+
+def get_genres():
+    """Distinct artist genres for the category tiles, cached in Redis (1h)."""
+    try:
+        cached = redis_client.get("genres:list")
+        if cached:
+            return json.loads(cached)
+        rows = query_all(
+            "SELECT genre, COUNT(*) AS n FROM artists "
+            "WHERE genre IS NOT NULL AND genre <> '' GROUP BY genre ORDER BY n DESC"
+        )
+        genres = [r["genre"] for r in rows]
+        redis_client.setex("genres:list", 3600, json.dumps(genres))
+        return genres
+    except Exception:
+        return []
 
 
 @app.route("/concerts")
 def browse():
-    """Full concert listing, optionally filtered by city, Redis-cached."""
-    city = request.args.get("city")
+    """Full concert listing, optionally filtered by city and/or genre. Cached."""
+    city = request.args.get("city") or None
+    genre = request.args.get("genre") or None
     flush_view_counts()
 
-    cache_key = f"trending:city:{city}" if city else "trending:all"
+    cache_key = f"browse:{city or '*'}:{genre or '*'}"
     cached = redis_client.get(cache_key)
     if cached:
         concerts = json.loads(cached)
     else:
-        base_select = """
+        where = ["c.status = 'scheduled'"]
+        params = []
+        if city:
+            where.append("v.city = %s"); params.append(city)
+        if genre:
+            where.append("a.genre = %s"); params.append(genre)
+        concerts = query_all(
+            """
             SELECT c.concert_id, c.title, c.concert_date, c.view_count,
                    v.name AS venue, v.city,
                    a.name AS headliner, a.genre, a.image_url AS headliner_image
             FROM   concerts c
             JOIN   venues  v ON v.venue_id  = c.venue_id
             JOIN   artists a ON a.artist_id = c.headline_artist_id
-        """
-        if city:
-            concerts = query_all(
-                base_select +
-                " WHERE v.city = %s AND c.status = 'scheduled'"
-                " ORDER BY c.view_count DESC, c.concert_date ASC LIMIT 50",
-                (city,),
-            )
-        else:
-            concerts = query_all(
-                base_select +
-                " WHERE c.status = 'scheduled'"
-                " ORDER BY c.concert_date ASC LIMIT 50"
-            )
+            WHERE  """ + " AND ".join(where) + """
+            ORDER  BY c.view_count DESC, c.concert_date ASC
+            LIMIT  60
+            """,
+            tuple(params),
+        )
+        _decorate_concerts(concerts)   # add date fields before caching
         redis_client.setex(cache_key, TRENDING_TTL,
                            json.dumps(concerts, default=str))
 
-    return render_template("home.html", concerts=concerts, city=city)
+    return render_template("home.html", concerts=concerts, city=city,
+                           genre=genre, genres=get_genres())
 
 
 @app.route("/concerts/<int:concert_id>")
@@ -367,10 +421,17 @@ def concert_detail(concert_id):
         r["helpful_count"] = len(liked_by)
         r["liked_by_me"] = me in liked_by
 
+    # How many more tickets this customer may book for this concert.
+    remaining_quota = MAX_TICKETS_PER_CONCERT
+    if g.user and not g.user.get("is_admin"):
+        remaining_quota = MAX_TICKETS_PER_CONCERT - booked_qty_for_concert(me, concert_id)
+        remaining_quota = max(0, remaining_quota)
+
     return render_template(
         "concert_detail.html",
         concert=concert, lineup=lineup, tickets=tickets,
         setlist=setlist, reviews=reviews,
+        max_per_concert=MAX_TICKETS_PER_CONCERT, remaining_quota=remaining_quota,
     )
 
 
@@ -411,6 +472,10 @@ def artist_detail(artist_id):
 @app.route("/concerts/<int:concert_id>/book", methods=["POST"])
 @login_required
 def book_ticket(concert_id):
+    # Only customers buy tickets; admins manage them via the dashboard.
+    if g.user.get("is_admin"):
+        flash("Admin accounts can't buy tickets — use the dashboard to manage bookings.")
+        return redirect(url_for("concert_detail", concert_id=concert_id))
     try:
         ticket_id = int(request.form["ticket_id"])
         quantity  = int(request.form["quantity"])
@@ -419,8 +484,17 @@ def book_ticket(concert_id):
 
     # Guard against zero / negative quantities: a non-positive value would
     # create a junk booking and, for negatives, try to *inflate* inventory.
-    if quantity < 1 or quantity > 6:
-        flash("Please choose a quantity between 1 and 6.")
+    if quantity < 1 or quantity > MAX_TICKETS_PER_CONCERT:
+        flash(f"Please choose a quantity between 1 and {MAX_TICKETS_PER_CONCERT}.")
+        return redirect(url_for("concert_detail", concert_id=concert_id))
+
+    # Per-concert quota, checked against the DB (sum of this user's confirmed
+    # tickets for this concert across all tiers).
+    already = booked_qty_for_concert(g.user["user_id"], concert_id)
+    if already + quantity > MAX_TICKETS_PER_CONCERT:
+        remaining = max(0, MAX_TICKETS_PER_CONCERT - already)
+        flash(f"Ticket limit reached: max {MAX_TICKETS_PER_CONCERT} per concert. "
+              f"You already have {already}; you can book {remaining} more.")
         return redirect(url_for("concert_detail", concert_id=concert_id))
 
     ticket = query_one(
@@ -604,6 +678,9 @@ def delete_review(review_id):
 @app.route("/my/bookings")
 @login_required
 def my_bookings():
+    # Admins don't have personal bookings — send them to the management view.
+    if g.user.get("is_admin"):
+        return redirect(url_for("admin_bookings"))
     rows = query_all(
         """
         SELECT b.booking_id, b.quantity, b.total_price, b.status, b.booked_at,
@@ -692,17 +769,23 @@ def admin_home():
 @app.route("/admin/concerts")
 @admin_required
 def admin_concerts():
-    concerts = query_all(
-        """
+    q = (request.args.get("q") or "").strip()
+    sql = """
         SELECT c.concert_id, c.title, c.concert_date, c.status, c.base_price,
                v.name AS venue, a.name AS headliner
         FROM   concerts c
         JOIN   venues  v ON v.venue_id  = c.venue_id
         JOIN   artists a ON a.artist_id = c.headline_artist_id
-        ORDER  BY c.concert_date DESC
-        """
-    )
-    return render_template("admin/concerts.html", concerts=concerts)
+    """
+    params = ()
+    if q:
+        sql += (" WHERE c.title LIKE %s OR a.name LIKE %s OR v.name LIKE %s"
+                " OR v.city LIKE %s")
+        like = f"%{q}%"
+        params = (like, like, like, like)
+    sql += " ORDER BY c.concert_date DESC"
+    concerts = query_all(sql, params)
+    return render_template("admin/concerts.html", concerts=concerts, q=q)
 
 
 def _concert_form_options():
@@ -711,33 +794,109 @@ def _concert_form_options():
     return venues, artists
 
 
+def _form_concert_datetime():
+    """Combine the separate date + time inputs into a MySQL DATETIME string.
+    Falls back to a legacy single datetime-local field if present."""
+    d = (request.form.get("date") or "").strip()
+    t = (request.form.get("time") or "").strip()
+    if d:
+        return f"{d} {(t or '20:00')}:00"
+    return request.form.get("concert_date", "").replace("T", " ")
+
+
+def _resolve_artist(cur):
+    """Return a headliner artist_id — inserting a new artist first if the admin
+    ticked 'add new artist' and filled in a name."""
+    if request.form.get("new_artist_toggle"):
+        name = (request.form.get("new_artist_name") or "").strip()
+        if not name:
+            raise ValueError("New artist name is required")
+        cur.execute("INSERT INTO artists (name, genre, country) VALUES (%s,%s,%s)",
+                    (name,
+                     (request.form.get("new_artist_genre") or "").strip() or None,
+                     (request.form.get("new_artist_country") or "").strip() or None))
+        return cur.lastrowid
+    return int(request.form["headline_artist_id"])
+
+
+def _resolve_venue(cur):
+    """Return a venue_id — inserting a new venue first if the admin ticked
+    'add new venue' and filled in name + city."""
+    if request.form.get("new_venue_toggle"):
+        name = (request.form.get("new_venue_name") or "").strip()
+        city = (request.form.get("new_venue_city") or "").strip()
+        if not (name and city):
+            raise ValueError("New venue needs a name and city")
+        cap = request.form.get("new_venue_capacity")
+        cur.execute("INSERT INTO venues (name, city, country, capacity) "
+                    "VALUES (%s,%s,%s,%s)",
+                    (name, city,
+                     (request.form.get("new_venue_country") or "").strip() or city,
+                     int(cap) if cap and cap.isdigit() else None))
+        return cur.lastrowid
+    return int(request.form["venue_id"])
+
+
 @app.route("/admin/concerts/new", methods=["GET", "POST"])
 @admin_required
 def admin_concert_new():
     venues, artists = _concert_form_options()
     if request.method == "POST":
         try:
-            new_id = execute(
-                """
-                INSERT INTO concerts
-                  (venue_id, headline_artist_id, title, concert_date, status, base_price)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (int(request.form["venue_id"]),
-                 int(request.form["headline_artist_id"]),
-                 request.form["title"].strip(),
-                 request.form["concert_date"].replace("T", " "),
-                 request.form.get("status", "scheduled"),
-                 float(request.form["base_price"])),
-            )
+            # Concert, any new artist/venue, and ticket tiers — one transaction.
+            with get_mysql() as conn, conn.cursor() as cur:
+                artist_id = _resolve_artist(cur)
+                venue_id  = _resolve_venue(cur)
+                cur.execute(
+                    "INSERT INTO concerts (venue_id, headline_artist_id, title, "
+                    "concert_date, status, base_price) VALUES (%s,%s,%s,%s,%s,%s)",
+                    (venue_id, artist_id, request.form["title"].strip(),
+                     _form_concert_datetime(),
+                     request.form.get("status", "scheduled"),
+                     float(request.form["base_price"])),
+                )
+                new_id = cur.lastrowid
+                # slot-1 headliner in the lineup, consistent with the concert
+                cur.execute("INSERT INTO concert_artists (concert_id, artist_id, "
+                            "slot_order, role) VALUES (%s,%s,1,'headliner')",
+                            (new_id, artist_id))
+                for tier, price, seats in _parse_tier_rows():
+                    cur.execute(
+                        "INSERT INTO tickets (concert_id, tier, price, "
+                        "total_seats, available_seats) VALUES (%s,%s,%s,%s,%s)",
+                        (new_id, tier, price, seats, seats),
+                    )
             _bust_trending_cache()
             flash("Concert created.")
             return redirect(url_for("admin_concert_edit", concert_id=new_id))
-        except Exception:
+        except Exception as e:
             log.exception("Concert create failed")
-            flash("Create failed — check the field values.")
+            flash(_friendly_db_error(e, "Create failed — check the field values."))
     return render_template("admin/concert_form.html",
                            concert=None, venues=venues, artists=artists, tickets=[])
+
+
+def _parse_tier_rows():
+    """Read repeated tier[]/price[]/seats[] inputs from the concert form into
+    a list of (tier, price, seats), skipping blank rows."""
+    tiers  = request.form.getlist("tier[]")
+    prices = request.form.getlist("price[]")
+    seats  = request.form.getlist("seats[]")
+    out = []
+    for t, p, s in zip(tiers, prices, seats):
+        t = t.strip()
+        if not t:
+            continue
+        out.append((t, float(p), int(s)))
+    return out
+
+
+def _friendly_db_error(exc, default):
+    """Surface the VIP-pricing trigger message nicely; otherwise a safe default."""
+    msg = str(getattr(exc, "args", ["", ""])[-1] if getattr(exc, "args", None) else exc)
+    if "VIP" in msg:
+        return "VIP tickets cannot be priced lower than other tiers."
+    return default
 
 
 @app.route("/admin/concerts/<int:concert_id>/edit", methods=["GET", "POST"])
@@ -746,26 +905,23 @@ def admin_concert_edit(concert_id):
     venues, artists = _concert_form_options()
     if request.method == "POST":
         try:
-            execute(
-                """
-                UPDATE concerts
-                SET venue_id=%s, headline_artist_id=%s, title=%s,
-                    concert_date=%s, status=%s, base_price=%s
-                WHERE concert_id=%s
-                """,
-                (int(request.form["venue_id"]),
-                 int(request.form["headline_artist_id"]),
-                 request.form["title"].strip(),
-                 request.form["concert_date"].replace("T", " "),
-                 request.form.get("status", "scheduled"),
-                 float(request.form["base_price"]),
-                 concert_id),
-            )
+            with get_mysql() as conn, conn.cursor() as cur:
+                artist_id = _resolve_artist(cur)
+                venue_id  = _resolve_venue(cur)
+                cur.execute(
+                    "UPDATE concerts SET venue_id=%s, headline_artist_id=%s, "
+                    "title=%s, concert_date=%s, status=%s, base_price=%s "
+                    "WHERE concert_id=%s",
+                    (venue_id, artist_id, request.form["title"].strip(),
+                     _form_concert_datetime(),
+                     request.form.get("status", "scheduled"),
+                     float(request.form["base_price"]), concert_id),
+                )
             _bust_trending_cache()
             flash("Concert updated.")
-        except Exception:
+        except Exception as e:
             log.exception("Concert update failed for %s", concert_id)
-            flash("Update failed — check the field values.")
+            flash(_friendly_db_error(e, "Update failed — check the field values."))
         return redirect(url_for("admin_concert_edit", concert_id=concert_id))
 
     concert = query_one("SELECT * FROM concerts WHERE concert_id=%s", (concert_id,))
@@ -806,9 +962,9 @@ def admin_ticket_add(concert_id):
              float(request.form["price"]), seats, seats),
         )
         flash("Ticket tier added.")
-    except Exception:
+    except Exception as e:
         log.exception("Ticket add failed for concert=%s", concert_id)
-        flash("Could not add ticket tier.")
+        flash(_friendly_db_error(e, "Could not add ticket tier."))
     return redirect(url_for("admin_concert_edit", concert_id=concert_id))
 
 
@@ -831,11 +987,17 @@ def admin_ticket_delete(ticket_id):
 @app.route("/admin/users")
 @admin_required
 def admin_users():
-    users = query_all(
-        "SELECT user_id, username, email, home_city, is_admin, is_active, created_at "
-        "FROM users ORDER BY user_id"
-    )
-    return render_template("admin/users.html", users=users)
+    q = (request.args.get("q") or "").strip()
+    sql = ("SELECT user_id, username, email, home_city, is_admin, is_active, "
+           "created_at FROM users")
+    params = ()
+    if q:
+        sql += " WHERE username LIKE %s OR email LIKE %s OR home_city LIKE %s"
+        like = f"%{q}%"
+        params = (like, like, like)
+    sql += " ORDER BY user_id"
+    users = query_all(sql, params)
+    return render_template("admin/users.html", users=users, q=q)
 
 
 @app.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
@@ -884,9 +1046,95 @@ def admin_user_delete(user_id):
     return redirect(url_for("admin_users"))
 
 
+# ---- admin: bookings ----------------------------------------------------
+
+@app.route("/admin/bookings")
+@admin_required
+def admin_bookings():
+    q = (request.args.get("q") or "").strip()
+    sql = """
+        SELECT b.booking_id, b.quantity, b.total_price, b.status, b.booked_at,
+               u.username, u.email,
+               t.tier, t.price, t.available_seats,
+               c.concert_id, c.title
+        FROM   bookings b
+        JOIN   users    u ON u.user_id   = b.user_id
+        JOIN   tickets  t ON t.ticket_id = b.ticket_id
+        JOIN   concerts c ON c.concert_id = t.concert_id
+    """
+    params = ()
+    if q:
+        sql += " WHERE u.username LIKE %s OR u.email LIKE %s OR c.title LIKE %s"
+        like = f"%{q}%"
+        params = (like, like, like)
+    sql += " ORDER BY b.booked_at DESC LIMIT 200"
+    bookings = query_all(sql, params)
+    return render_template("admin/bookings.html", bookings=bookings, q=q)
+
+
+@app.route("/admin/bookings/<int:booking_id>/edit", methods=["POST"])
+@admin_required
+def admin_booking_edit(booking_id):
+    """Admin edits a customer's booking quantity. Seats are reconciled in a
+    single locking transaction (no trigger fires because status is unchanged):
+    we take/return exactly the delta, and the tickets CHECK constraints prevent
+    overselling or exceeding capacity."""
+    try:
+        new_qty = int(request.form["quantity"])
+    except (KeyError, ValueError):
+        abort(400, "Invalid quantity")
+    if new_qty < 1:
+        flash("Quantity must be at least 1 (cancel the booking to release seats).")
+        return redirect(url_for("admin_bookings"))
+    try:
+        with get_mysql() as conn, conn.cursor() as cur:
+            cur.execute("SELECT quantity, ticket_id, status FROM bookings "
+                        "WHERE booking_id=%s FOR UPDATE", (booking_id,))
+            bk = cur.fetchone()
+            if not bk:
+                abort(404)
+            if bk["status"] != "confirmed":
+                flash("Only confirmed bookings can be re-sized.")
+                return redirect(url_for("admin_bookings"))
+            delta = new_qty - bk["quantity"]           # >0 = needs more seats
+            cur.execute("SELECT price, available_seats FROM tickets "
+                        "WHERE ticket_id=%s FOR UPDATE", (bk["ticket_id"],))
+            tk = cur.fetchone()
+            if delta > 0 and tk["available_seats"] < delta:
+                flash("Not enough seats left to increase this booking.")
+                return redirect(url_for("admin_bookings"))
+            cur.execute("UPDATE tickets SET available_seats = available_seats - %s "
+                        "WHERE ticket_id=%s", (delta, bk["ticket_id"]))
+            cur.execute("UPDATE bookings SET quantity=%s, total_price=%s "
+                        "WHERE booking_id=%s",
+                        (new_qty, float(tk["price"]) * new_qty, booking_id))
+        flash("Booking updated.")
+    except Exception:
+        log.exception("Admin booking edit failed for %s", booking_id)
+        flash("Update failed.")
+    return redirect(url_for("admin_bookings"))
+
+
+@app.route("/admin/bookings/<int:booking_id>/cancel", methods=["POST"])
+@admin_required
+def admin_booking_cancel(booking_id):
+    # The AFTER UPDATE trigger restores seats on confirmed -> cancelled.
+    bk = query_one("SELECT status FROM bookings WHERE booking_id=%s", (booking_id,))
+    if not bk:
+        abort(404)
+    if bk["status"] != "confirmed":
+        flash("That booking is already cancelled/refunded.")
+        return redirect(url_for("admin_bookings"))
+    execute("UPDATE bookings SET status='cancelled' WHERE booking_id=%s", (booking_id,))
+    flash("Booking cancelled — seats released.")
+    return redirect(url_for("admin_bookings"))
+
+
 def _bust_trending_cache():
-    for key in redis_client.scan_iter(match="trending:*"):
-        redis_client.delete(key)
+    # Concert/venue/artist edits can change listings, cities and genres.
+    for pattern in ("browse:*", "trending:*", "cities:list", "genres:list"):
+        for key in redis_client.scan_iter(match=pattern):
+            redis_client.delete(key)
 
 
 # ============================================================

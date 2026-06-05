@@ -18,6 +18,8 @@ erDiagram
         varchar email UK
         varchar password_hash
         varchar home_city
+        tinyint is_admin
+        tinyint is_active
         datetime created_at
     }
 
@@ -86,6 +88,9 @@ erDiagram
         string mongo_review_id "stored in MongoDB.reviews"
         int concert_id "logical FK"
         int user_id "logical FK"
+        int rating "1-5"
+        array liked_by "user_ids (dedup likes)"
+        array photos "{url,key} -> MinIO"
     }
 
     SETLISTS_PTR {

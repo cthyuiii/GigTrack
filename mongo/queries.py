@@ -3,6 +3,8 @@ GigTrack — Sample MongoDB queries.
 Each function corresponds to a representative MongoDB query used by the app.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from pymongo import MongoClient, DESCENDING
 
 client = MongoClient(os.environ.get("MONGO_URI", "mongodb://localhost:27017"))

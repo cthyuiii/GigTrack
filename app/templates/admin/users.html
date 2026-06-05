@@ -4,6 +4,13 @@
   <h1>Users</h1>
   <p class="muted"><a href="{{ url_for('admin_home') }}">← Back to dashboard</a></p>
 
+  <form class="search-bar" method="get" action="{{ url_for('admin_users') }}">
+    <input name="q" value="{{ q or '' }}" placeholder="Search username, email or city">
+    <button type="submit">Search</button>
+    {% if q %}<a class="btn-ghost btn-sm" href="{{ url_for('admin_users') }}">Clear</a>{% endif %}
+  </form>
+  {% if q %}<p class="muted">{{ users|length }} result(s) for “{{ q }}”.</p>{% endif %}
+
   <table>
     <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>City</th><th>Admin</th><th>Active</th><th></th></tr></thead>
     <tbody>

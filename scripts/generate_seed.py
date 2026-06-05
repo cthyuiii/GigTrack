@@ -160,15 +160,21 @@ def main():
     w(",\n".join(rows) + ";\n")
 
     # ---- tickets ----
+    # Pricing respects the VIP rule: VIP is always >= every non-VIP tier of the
+    # same concert (otherwise trg_ticket_vip_price_* would reject the insert).
     w("INSERT INTO tickets (concert_id, tier, price, total_seats, available_seats) VALUES")
     rows = []
     ticket_id = 0
     ticket_meta = {}  # ticket_id -> (concert_id, price, total_seats)
     for cid in range(1, NUM_CONCERTS + 1):
-        tiers = rng.sample(["GA", "VIP", "Pit", "Balcony"], rng.randint(1, 3))
+        tiers = rng.sample(["GA", "Pit", "Balcony", "VIP"], rng.randint(1, 3))
+        base = rng.choice([55, 70, 88, 110])           # baseline non-VIP price
         for tier in tiers:
             ticket_id += 1
-            price = rng.choice([55, 70, 88, 110, 150, 195, 220])
+            if tier == "VIP":
+                price = base + rng.choice([60, 90, 120])   # premium over base
+            else:
+                price = base + rng.choice([0, 10, 20])     # stays <= VIP
             seats = rng.choice([300, 500, 900, 1500, 2200, 4000])
             ticket_meta[ticket_id] = (cid, price, seats)
             rows.append(f"  ({cid}, {sql_str(tier)}, {price}.00, {seats}, {seats})")

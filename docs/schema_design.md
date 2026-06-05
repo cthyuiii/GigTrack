@@ -83,12 +83,11 @@ Justification: photo arrays and tag arrays are variable-length; body is unstruct
 | Key pattern | Type | Purpose | TTL |
 |---|---|---|---|
 | `concert:{id}:views` | counter | pending view delta; drained into MySQL `concerts.view_count` by `flush_view_counts()` before any view-ordered list renders (GETDEL = atomic, lossless) | none |
-| `trending:city:{city}` / `trending:all` | string (JSON) | cached home/trending listing | 5 min |
-| `search:artist:{prefix}` | set | autocomplete | 1 hr |
+| `browse:{city}:{genre}` | string (JSON) | cached concert listing per filter combination | 5 min |
+| `cities:list` / `genres:list` | string (JSON) | distinct cities / genres for the filter dropdown & category tiles | 1 hr |
 | `session:{token}` | string (user_id) | auth session | 30 min |
-| `concert:{id}:detail` | hash | cached detail-page payload | 60 s |
 
-This gives a clear demoable speedup on the home/detail pages and offloads view-counting from MySQL.
+All listing/filter caches are invalidated immediately when an admin creates, edits or deletes a concert (`_bust_trending_cache()`). This gives a clear demoable speedup on the listing pages and offloads view-counting from MySQL.
 
 ## 4. Object storage (file uploads)
 

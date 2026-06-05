@@ -16,6 +16,10 @@ import os
 import random
 import sys
 from datetime import datetime, timezone
+
+from dotenv import load_dotenv
+load_dotenv()                      # honour .env for local (non-Docker) runs
+
 from pymongo import MongoClient, ASCENDING, DESCENDING, TEXT
 
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")

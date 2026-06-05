@@ -7,6 +7,13 @@
   </div>
   <p class="muted"><a href="{{ url_for('admin_home') }}">← Back to dashboard</a></p>
 
+  <form class="search-bar" method="get" action="{{ url_for('admin_concerts') }}">
+    <input name="q" value="{{ q or '' }}" placeholder="Search title, artist, venue or city">
+    <button type="submit">Search</button>
+    {% if q %}<a class="btn-ghost btn-sm" href="{{ url_for('admin_concerts') }}">Clear</a>{% endif %}
+  </form>
+  {% if q %}<p class="muted">{{ concerts|length }} result(s) for “{{ q }}”.</p>{% endif %}
+
   <table>
     <thead><tr><th>Title</th><th>Headliner</th><th>Venue</th><th>Date</th><th>Status</th><th>Base $</th><th></th></tr></thead>
     <tbody>

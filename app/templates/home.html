@@ -2,23 +2,40 @@
 {% block title %}GigTrack — concerts{% endblock %}
 {% block content %}
   <div class="section-head">
-    <h1>{% if city %}Upcoming in {{ city }}{% else %}Upcoming concerts{% endif %}</h1>
-    {% if city %}<a href="{{ url_for('browse') }}">← All cities</a>{% endif %}
+    <h1>
+      {% if genre and city %}{{ genre }} in {{ city }}
+      {% elif genre %}{{ genre }} concerts
+      {% elif city %}Upcoming in {{ city }}
+      {% else %}Upcoming concerts{% endif %}
+    </h1>
+    {% if city or genre %}<a href="{{ url_for('browse') }}">Clear filters</a>{% endif %}
   </div>
+
+  {% if genres %}
+    <div class="tiles tiles-sm">
+      <a class="tile {{ 'tile-on' if not genre }}" href="{{ url_for('browse', city=city) }}">All</a>
+      {% for gtag in genres %}
+        <a class="tile {{ 'tile-on' if genre == gtag }}"
+           href="{{ url_for('browse', genre=gtag, city=city) }}">{{ gtag }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {% if not concerts %}
     <p class="muted">No concerts found.</p>
   {% endif %}
-  <ul class="cards">
+  <div class="ev-grid">
     {% for c in concerts %}
-      <li class="card reveal" style="--i: {{ loop.index0 % 12 }}">
-        <a class="card-imgwrap" href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">
-          <div class="card-img" {% if c.headliner_image %}style="background-image:url('{{ c.headliner_image }}')"{% endif %}></div>
-        </a>
-        <a class="card-title" href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">{{ c.title }}</a>
-        <p>{{ c.headliner }} <span class="muted">· {{ c.genre or '' }}</span></p>
-        <p class="muted">📍 {{ c.venue }}, {{ c.city }}</p>
-        <p class="muted">🗓 {{ c.concert_date.strftime('%a %d %b %Y · %H:%M') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}</p>
-      </li>
+      <a class="ev-card reveal" style="--i: {{ loop.index0 % 12 }}"
+         href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">
+        <div class="ev-img" {% if c.headliner_image %}style="background-image:url('{{ c.headliner_image }}')"{% endif %}>
+          {% if c.date_day %}<span class="ev-date"><b>{{ c.date_day }}</b>{{ c.date_mon }}</span>{% endif %}
+        </div>
+        <div class="ev-body">
+          <h3 class="ev-title">{{ c.title }}</h3>
+          <p class="ev-meta">{{ c.venue }} · {{ c.city }}</p>
+        </div>
+      </a>
     {% endfor %}
-  </ul>
+  </div>
 {% endblock %}

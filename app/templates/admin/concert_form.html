@@ -4,48 +4,90 @@
   <h1>{{ 'Edit concert' if concert else 'New concert' }}</h1>
   <p class="muted"><a href="{{ url_for('admin_concerts') }}">← Back to concerts</a></p>
 
-  <form method="post" class="admin-form"
+  <form method="post" class="admin-form card-form"
         action="{{ url_for('admin_concert_edit', concert_id=concert.concert_id) if concert else url_for('admin_concert_new') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <label>Title
-      <input name="title" value="{{ concert.title if concert else '' }}" required>
-    </label>
+    <div class="form-grid">
+      <label class="col-2">Title
+        <input name="title" value="{{ concert.title if concert else '' }}" placeholder="e.g. Crystal Mango - Live 2026" required>
+      </label>
 
-    <label>Headliner
-      <select name="headline_artist_id" required>
-        {% for a in artists %}
-          <option value="{{ a.artist_id }}" {% if concert and concert.headline_artist_id == a.artist_id %}selected{% endif %}>{{ a.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
+      <div class="col-2 entity-pick">
+        <div class="entity-head">
+          <label class="inline-label">Headliner</label>
+          <label class="checkbox"><input type="checkbox" name="new_artist_toggle" class="toggle-new" data-target="new-artist"> Add new artist</label>
+        </div>
+        <select name="headline_artist_id" class="existing-artist">
+          {% for a in artists %}
+            <option value="{{ a.artist_id }}" {% if concert and concert.headline_artist_id == a.artist_id %}selected{% endif %}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+        <div id="new-artist" class="new-entity" hidden>
+          <input name="new_artist_name" placeholder="Artist name">
+          <input name="new_artist_genre" placeholder="Genre (e.g. Pop)">
+          <input name="new_artist_country" placeholder="Country">
+        </div>
+      </div>
 
-    <label>Venue
-      <select name="venue_id" required>
-        {% for v in venues %}
-          <option value="{{ v.venue_id }}" {% if concert and concert.venue_id == v.venue_id %}selected{% endif %}>{{ v.name }} — {{ v.city }}</option>
-        {% endfor %}
-      </select>
-    </label>
+      <div class="col-2 entity-pick">
+        <div class="entity-head">
+          <label class="inline-label">Venue</label>
+          <label class="checkbox"><input type="checkbox" name="new_venue_toggle" class="toggle-new" data-target="new-venue"> Add new venue</label>
+        </div>
+        <select name="venue_id" class="existing-venue">
+          {% for v in venues %}
+            <option value="{{ v.venue_id }}" {% if concert and concert.venue_id == v.venue_id %}selected{% endif %}>{{ v.name }} — {{ v.city }}</option>
+          {% endfor %}
+        </select>
+        <div id="new-venue" class="new-entity" hidden>
+          <input name="new_venue_name" placeholder="Venue name">
+          <input name="new_venue_city" placeholder="City">
+          <input name="new_venue_country" placeholder="Country">
+          <input name="new_venue_capacity" type="number" min="1" placeholder="Capacity (optional)">
+        </div>
+      </div>
 
-    <label>Date &amp; time
-      <input type="datetime-local" name="concert_date"
-             value="{{ concert.concert_date.strftime('%Y-%m-%dT%H:%M') if concert and concert.concert_date.__class__.__name__ == 'datetime' else '' }}" required>
-    </label>
+      <label>Date
+        <input type="date" name="date"
+               value="{{ concert.concert_date.strftime('%Y-%m-%d') if concert and concert.concert_date.__class__.__name__ == 'datetime' else '' }}" required>
+      </label>
 
-    <label>Status
-      <select name="status">
-        {% for s in ['scheduled','sold_out','cancelled','completed'] %}
-          <option value="{{ s }}" {% if concert and concert.status == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
-    </label>
+      <label>Time
+        <input type="time" name="time"
+               value="{{ concert.concert_date.strftime('%H:%M') if concert and concert.concert_date.__class__.__name__ == 'datetime' else '20:00' }}" required>
+      </label>
 
-    <label>Base price
-      <input type="number" step="0.01" min="0" name="base_price" value="{{ concert.base_price if concert else '0.00' }}" required>
-    </label>
+      <label>Status
+        <select name="status">
+          {% for s in ['scheduled','sold_out','cancelled','completed'] %}
+            <option value="{{ s }}" {% if concert and concert.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
 
-    <button>{{ 'Save changes' if concert else 'Create concert' }}</button>
+      <label>Base price ($)
+        <input type="number" step="0.01" min="0" name="base_price" value="{{ concert.base_price if concert else '0.00' }}" required>
+      </label>
+    </div>
+
+    {% if not concert %}
+      <fieldset class="tier-fieldset">
+        <legend>Ticket tiers &amp; seats</legend>
+        <p class="muted">Add one row per price category (e.g. GA, VIP). You can add more after creating.</p>
+        <div id="tier-rows">
+          <div class="tier-row">
+            <input name="tier[]" placeholder="Tier name (e.g. GA)">
+            <input name="price[]" type="number" step="0.01" min="0" placeholder="Price $">
+            <input name="seats[]" type="number" min="1" placeholder="Seats">
+            <button type="button" class="ghost tier-remove" aria-label="Remove tier">✕</button>
+          </div>
+        </div>
+        <button type="button" class="btn-ghost btn-sm" id="add-tier">+ Add tier</button>
+      </fieldset>
+    {% endif %}
+
+    <button class="book-btn">{{ 'Save changes' if concert else 'Create concert' }}</button>
   </form>
 
   {% if concert %}
@@ -82,5 +124,34 @@
         <button>Add tier</button>
       </form>
     </section>
+  {% endif %}
+
+  <script>
+    document.querySelectorAll('.toggle-new').forEach(function (cb) {
+      var box = document.getElementById(cb.dataset.target);
+      var select = cb.closest('.entity-pick').querySelector('select');
+      function sync() {
+        box.hidden = !cb.checked;
+        select.disabled = cb.checked;       // disabled selects aren't submitted
+      }
+      cb.addEventListener('change', sync);
+      sync();
+    });
+  </script>
+
+  {% if not concert %}
+  <script>
+    var rows = document.getElementById('tier-rows');
+    document.getElementById('add-tier').addEventListener('click', function () {
+      var row = rows.firstElementChild.cloneNode(true);
+      row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+      rows.appendChild(row);
+    });
+    rows.addEventListener('click', function (e) {
+      if (e.target.classList.contains('tier-remove') && rows.children.length > 1) {
+        e.target.closest('.tier-row').remove();
+      }
+    });
+  </script>
   {% endif %}
 {% endblock %}

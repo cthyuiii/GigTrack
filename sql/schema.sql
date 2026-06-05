@@ -5,6 +5,8 @@
 SET NAMES utf8mb4;
 DROP TRIGGER IF EXISTS trg_booking_decrement_seats;
 DROP TRIGGER IF EXISTS trg_booking_restore_seats_on_cancel;
+DROP TRIGGER IF EXISTS trg_ticket_vip_price_ins;
+DROP TRIGGER IF EXISTS trg_ticket_vip_price_upd;
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS concert_artists;
@@ -152,6 +154,48 @@ BEGIN
     UPDATE tickets
        SET available_seats = available_seats + OLD.quantity
      WHERE ticket_id = OLD.ticket_id;
+  END IF;
+END//
+
+-- ------------------------------------------------------------
+-- 3. Pricing rule: a VIP tier must never be cheaper than a non-VIP tier of
+--    the SAME concert. Enforced on both insert and update of tickets.
+-- ------------------------------------------------------------
+CREATE TRIGGER trg_ticket_vip_price_ins
+BEFORE INSERT ON tickets
+FOR EACH ROW
+BEGIN
+  DECLARE bad INT DEFAULT 0;
+  IF NEW.tier = 'VIP' THEN
+    SELECT COUNT(*) INTO bad FROM tickets
+     WHERE concert_id = NEW.concert_id AND tier <> 'VIP' AND price > NEW.price;
+  ELSE
+    SELECT COUNT(*) INTO bad FROM tickets
+     WHERE concert_id = NEW.concert_id AND tier = 'VIP' AND price < NEW.price;
+  END IF;
+  IF bad > 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'VIP tickets cannot be priced lower than other tiers';
+  END IF;
+END//
+
+CREATE TRIGGER trg_ticket_vip_price_upd
+BEFORE UPDATE ON tickets
+FOR EACH ROW
+BEGIN
+  DECLARE bad INT DEFAULT 0;
+  IF NEW.tier = 'VIP' THEN
+    SELECT COUNT(*) INTO bad FROM tickets
+     WHERE concert_id = NEW.concert_id AND ticket_id <> NEW.ticket_id
+       AND tier <> 'VIP' AND price > NEW.price;
+  ELSE
+    SELECT COUNT(*) INTO bad FROM tickets
+     WHERE concert_id = NEW.concert_id AND ticket_id <> NEW.ticket_id
+       AND tier = 'VIP' AND price < NEW.price;
+  END IF;
+  IF bad > 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'VIP tickets cannot be priced lower than other tiers';
   END IF;
 END//
 

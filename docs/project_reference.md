@@ -8,7 +8,7 @@ A file-by-file rundown of the codebase and a dependency overview.
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Orchestrates the 5 containers (MySQL, MongoDB, Redis, MinIO, the Flask app), maps host ports, injects env vars, and runs the boot sequence (Mongo seed → bucket → images → Flask). |
-| `Dockerfile` | Builds the app image: Python 3.12-slim, installs the DejaVu font (for poster text) and the Python deps. |
+| `Dockerfile` | Builds the app image: Python 3.12-slim + the Python deps. |
 | `requirements.txt` | Python dependencies (see table below). |
 | `.env.example` | Template for local config; copy to `.env` (which is gitignored). |
 | `.gitignore` | Excludes `__pycache__`, `.env`, build artifacts. |

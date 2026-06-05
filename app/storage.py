@@ -24,6 +24,12 @@ import json
 import logging
 import os
 
+# Load .env before reading config, so running this module standalone
+# (e.g. `python app/storage.py` for a local run) picks up the same settings
+# the app uses. Harmless/idempotent when env is already set (Docker).
+from dotenv import load_dotenv
+load_dotenv()
+
 log = logging.getLogger("gigtrack.storage")
 
 S3_ENDPOINT   = os.environ.get("S3_ENDPOINT")

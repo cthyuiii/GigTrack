@@ -26,8 +26,11 @@
 
       <div class="nav-right">
         {% if g.user %}
-          {% if g.user.is_admin %}<a class="nav-link" href="{{ url_for('admin_home') }}">Admin</a>{% endif %}
-          <a class="nav-link" href="{{ url_for('my_bookings') }}">My bookings</a>
+          {% if g.user.is_admin %}
+            <a class="nav-link" href="{{ url_for('admin_home') }}">Admin</a>
+          {% else %}
+            <a class="nav-link" href="{{ url_for('my_bookings') }}">My bookings</a>
+          {% endif %}
           <a class="nav-link" href="{{ url_for('profile') }}">Hey, {{ g.user.username }}</a>
           <a class="nav-link" href="{{ url_for('logout') }}">Log out</a>
         {% else %}

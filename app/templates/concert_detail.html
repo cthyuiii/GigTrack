@@ -28,32 +28,53 @@
 
     <section class="tickets">
       <h2>Tickets</h2>
-      <table>
-        <thead><tr><th>Tier</th><th>Price</th><th>Seats left</th><th></th></tr></thead>
-        <tbody>
-          {% for t in tickets %}
-          <tr>
-            <td>{{ t.tier }}</td>
-            <td>${{ '%.2f'|format(t.price) }}</td>
-            <td>{{ t.available_seats }} / {{ t.total_seats }}</td>
-            <td>
-              {% if g.user and t.available_seats > 0 %}
-                <form method="post" action="{{ url_for('book_ticket', concert_id=concert.concert_id) }}">
+      {% if g.user and g.user.is_admin %}
+        <p class="muted">You're signed in as an admin — ticket purchasing is for
+        customer accounts. Manage bookings in the
+        <a href="{{ url_for('admin_bookings') }}">admin dashboard</a>.</p>
+      {% elif g.user %}
+        {% if remaining_quota > 0 %}
+          <p class="muted">You can book up to <strong>{{ remaining_quota }}</strong>
+          more ticket(s) for this concert (limit {{ max_per_concert }} per concert).</p>
+        {% else %}
+          <p class="flash-inline">You've reached the {{ max_per_concert }}-ticket
+          limit for this concert.</p>
+        {% endif %}
+      {% endif %}
+      <ul class="ticket-list">
+        {% for t in tickets %}
+          {% set cap = [t.available_seats, remaining_quota]|min %}
+          <li class="ticket-row">
+            <div class="ticket-info">
+              <span class="ticket-tier">{{ t.tier }}</span>
+              <span class="ticket-price">${{ '%.2f'|format(t.price) }}</span>
+              <span class="ticket-seats muted">{{ t.available_seats }} left</span>
+            </div>
+            <div class="ticket-action">
+              {% if g.user and not g.user.is_admin and t.available_seats > 0 and remaining_quota > 0 %}
+                <form class="book-form" method="post"
+                      action="{{ url_for('book_ticket', concert_id=concert.concert_id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="ticket_id" value="{{ t.ticket_id }}">
-                  <input type="number" name="quantity" min="1" max="6" value="1">
-                  <button type="submit">Book</button>
+                  <div class="qty-stepper" data-max="{{ cap }}">
+                    <button type="button" class="qty-dec" aria-label="Decrease quantity">−</button>
+                    <input type="number" name="quantity" value="1" min="1"
+                           max="{{ cap }}" readonly aria-label="Quantity">
+                    <button type="button" class="qty-inc" aria-label="Increase quantity">+</button>
+                  </div>
+                  <button class="book-btn" type="submit">Book</button>
                 </form>
               {% elif not g.user %}
-                <em class="muted"><a href="{{ url_for('login') }}">Log in to book</a></em>
-              {% else %}
-                <em class="muted">Sold out</em>
+                <a class="btn-ghost btn-sm" href="{{ url_for('login') }}">Log in to book</a>
+              {% elif g.user and not g.user.is_admin and remaining_quota <= 0 %}
+                <span class="muted">Limit reached</span>
+              {% elif t.available_seats <= 0 %}
+                <span class="muted">Sold out</span>
               {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
     </section>
 
     <section class="setlist">
@@ -150,4 +171,17 @@
       </div>
     </section>
   </article>
+
+  <script>
+    document.querySelectorAll('.qty-stepper').forEach(function (s) {
+      var input = s.querySelector('input');
+      var max = parseInt(s.dataset.max || '6', 10);
+      s.querySelector('.qty-dec').addEventListener('click', function () {
+        input.value = Math.max(1, parseInt(input.value, 10) - 1);
+      });
+      s.querySelector('.qty-inc').addEventListener('click', function () {
+        input.value = Math.min(max, parseInt(input.value, 10) + 1);
+      });
+    });
+  </script>
 {% endblock %}

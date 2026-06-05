@@ -1,18 +1,31 @@
 # GigTrack
 
-INF2003 group project scaffold — a live-music & concert companion that uses
-three datastores intentionally:
+A live-music & concert companion (INF2003 Database Systems group project). It
+uses four datastores, each for what it's best at:
 
-- **MySQL** for transactional data (users, artists, venues, concerts, tickets,
-  bookings, follows) — clear relational integrity, referential constraints,
-  and a trigger that decrements seat inventory atomically on booking.
-- **MongoDB** for variable-shape data (setlists, reviews with embedded photos
-  and tags, artist bios) — natural fit for documents.
-- **Redis** for caching trending lists, search autocomplete, view counters,
-  and session tokens.
-- **MinIO** (S3-compatible object storage) for review photo *blobs* — the
-  database keeps only a pointer (`photos[].url` / `key`); the bytes live in a
+- **MySQL** — transactional, relational data (users, artists, venues, concerts,
+  tickets, bookings, follows): foreign keys, CHECK constraints, and triggers
+  that keep seat inventory and VIP pricing correct.
+- **MongoDB** — variable-shape documents (setlists, reviews with tags/photos,
+  artist bios) that would be painful to normalise.
+- **Redis** — cached concert listings, distinct city/genre lists, live view
+  counters, and session tokens.
+- **MinIO** — S3-compatible object storage for image **blobs** (artist photos,
+  review photos). The database stores only the URL pointer; bytes live in a
   bucket. Swap the endpoint for AWS S3 / Cloudflare R2 with no code change.
+
+## Features
+
+- Ticketmaster-style landing page: full-width hero, featured grid, category
+  tiles (from DB genres), and a "more shows" rail.
+- Browse + filter concerts by **city and/or genre** (Redis-cached).
+- Concert detail with lineup, tiered tickets, MongoDB setlist & reviews.
+- Customer flow: sign up, log in, book tickets (**max 6 per concert**, enforced
+  by a DB query), review with photos, like/unlike, follow artists.
+- **Admin dashboard**: create/edit/delete concerts and ticket tiers (add new
+  artists/venues on the fly), manage bookings (resize/cancel), manage users
+  (edit/disable/delete), with search on every list. Admins can't buy tickets.
+- Security: parameterised SQL, bcrypt passwords, CSRF tokens, hardened cookies.
 
 ## Ports (host → container)
 
@@ -35,42 +48,38 @@ container.
 
 ```bash
 docker compose up --build
-# First boot takes ~1–2 min: MySQL seeds, Mongo seeds, and artist images
-# are generated. Then open:
+# First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
 open http://localhost:5001
 ```
-
-> **Artist photos.** On boot `scripts/fetch_artist_images.py` downloads a real
-> placeholder portrait for each of the 30 artists (from Pravatar — a free set of
-> ~70 portrait avatars; no API key, no rate limit) and uploads it to MinIO, so
-> the bytes are served from object storage. It finishes in a couple of seconds.
-> If an artist's photo can't be fetched it just keeps the gradient placeholder.
-> Re-run any time without a reboot:
-> `docker compose exec app python scripts/fetch_artist_images.py --force`
-
-> **Changed the schema or seed?** MySQL only runs `schema.sql`/`seed.sql` on a
-> *fresh* data volume, so a plain `--build` keeps the OLD data (this is what
-> caused stale concerts + login errors). Reset the volumes to reseed:
->
-> ```bash
-> docker compose down -v && docker compose up --build
-> ```
 
 Sample logins (password is `password` for everyone):
 
 - **Admin:** `macc@example.com` / `password` → Admin dashboard at `/admin`
 - Regular users: `user02@example.com` … `user21@example.com`
 
+> **Artist photos.** On boot `scripts/fetch_artist_images.py` downloads a real
+> placeholder portrait per artist (from Pravatar — free, no API key, no rate
+> limit) and uploads it to MinIO. If a photo can't be fetched the card keeps a
+> gradient placeholder. Re-run without a reboot:
+> `docker compose exec app python scripts/fetch_artist_images.py --force`
+
+> **Changed the schema or seed?** MySQL only runs `schema.sql`/`seed.sql` on a
+> *fresh* data volume, so a plain `--build` keeps the OLD data. Reset volumes to
+> reseed:
+>
+> ```bash
+> docker compose down -v && docker compose up --build
+> ```
+
 ## Quick start — local Flask, datastores in Docker
 
-Run the four datastores in Docker (they auto-seed), but run Flask on your
-machine for faster iteration.
+Run the datastores in Docker (they auto-seed), but run Flask on your machine.
 
 ```bash
 # 1. Start ONLY the datastores (MySQL auto-loads schema.sql + seed.sql).
 docker compose up -d mysql mongo redis minio
 
-# 2. Create your .env pointing at the remapped host ports above.
+# 2. Create your .env pointing at the remapped host ports.
 cp .env.example .env
 ```
 
@@ -93,22 +102,21 @@ FLASK_SECRET=dev-secret-change-me
 ```
 
 ```bash
-# 3. Install deps and seed Mongo + bucket + artist photos (reads .env automatically).
+# 3. Install deps; seed Mongo + create bucket + fetch artist photos.
+#    Every script loads .env automatically (python-dotenv).
 pip install -r requirements.txt
 export PYTHONPATH=$PWD/app
 python mongo/seed.py
-python app/storage.py               # creates the MinIO bucket
-python scripts/fetch_artist_images.py   # real portraits → MinIO
-# 4. Run the app (local Flask defaults to port 5000):
-flask --app app/app.py run          # → http://localhost:5000
+python app/storage.py                  # creates the MinIO bucket
+python scripts/fetch_artist_images.py  # real portraits → MinIO
+
+# 4. Run the app (local Flask defaults to port 5000).
+flask --app app/app.py run             # → http://localhost:5000
 ```
 
-> `.env` is loaded automatically by `app/db.py` via python-dotenv, so every
-> script and the app pick up the same config. `.env` is gitignored — never
-> commit real secrets.
->
-> If instead you run MySQL/Mongo/Redis **natively** on their default ports,
-> use `.env.example` as-is (3306 / 27017 / 6379) and load the SQL yourself:
+> `.env` is gitignored — never commit real secrets. If you instead run
+> MySQL/Mongo/Redis **natively** on default ports, use `.env.example` as-is
+> (3306 / 27017 / 6379) and load the SQL yourself:
 > `mysql -uroot -p gigtrack < sql/schema.sql && mysql -uroot -p gigtrack < sql/seed.sql`.
 
 ## Project layout
@@ -116,89 +124,71 @@ flask --app app/app.py run          # → http://localhost:5000
 ```
 gigtrack/
 ├── docs/
-│   ├── er_diagram.mermaid     ER diagram (Mermaid syntax)
-│   └── schema_design.md       Rationale for all three datastores
+│   ├── er_diagram.mermaid       ER diagram (Mermaid)
+│   ├── data_flow.svg            Sequence diagram across the 4 datastores
+│   ├── schema_design.md         Datastore rationale + SQL↔NoSQL discussion
+│   ├── demo_cli.md              CLI cheat-sheet + per-store demo scenarios
+│   ├── presentation_demo.md     10-min video script (6 presenters)
+│   ├── report_structure.md      Proposal + final report outlines
+│   └── project_reference.md     File-by-file + dependency reference
 ├── sql/
-│   ├── schema.sql             8 tables, FKs, indexes, 2 triggers
-│   ├── seed.sql               GENERATED seed (scripts/generate_seed.py)
-│   └── queries.sql            CRUD + joins + nested + window/CTE/txn + triggers
+│   ├── schema.sql               8 tables, FKs, CHECK, indexes, 4 triggers
+│   ├── seed.sql                 GENERATED seed (scripts/generate_seed.py)
+│   └── queries.sql              CRUD + joins + nested + window/CTE/txn + triggers
 ├── mongo/
-│   ├── seed.py                Seeds setlists, reviews, artist_bios (idempotent)
-│   └── queries.py             Sample queries inc. $facet / $lookup aggregation
+│   ├── seed.py                  Seeds setlists, reviews, artist_bios (idempotent)
+│   └── queries.py               Sample queries inc. $facet / $lookup
 ├── app/
-│   ├── app.py                 Flask routes (incl. /admin dashboard)
-│   ├── db.py                  MySQL / Mongo / Redis connection helpers
-│   ├── storage.py             S3/MinIO object-storage helper (media blobs)
-│   ├── templates/             Jinja templates (incl. templates/admin/)
+│   ├── app.py                   Flask routes (incl. /admin dashboard)
+│   ├── db.py                    MySQL / Mongo / Redis helpers (+ retry)
+│   ├── storage.py               S3/MinIO object-storage helper
+│   ├── templates/               Jinja templates (incl. templates/admin/)
 │   └── static/style.css
 ├── scripts/
-│   ├── generate_seed.py       Writes the larger synthetic sql/seed.sql
-│   ├── fetch_artist_images.py Real portrait photos → MinIO → artists.image_url
-│   └── benchmark.py           Multi-dimension perf benchmark → CSV + chart
+│   ├── generate_seed.py         Writes the synthetic sql/seed.sql
+│   ├── fetch_artist_images.py   Real portraits → MinIO → artists.image_url
+│   └── benchmark.py             Perf benchmark → CSV + chart
 ├── docker-compose.yml
 ├── Dockerfile
 └── requirements.txt
 ```
 
-## Demo script (for video / slides)
+## Demo script (short version)
 
-1. Show the landing page (`/`) — hero + trending concerts (with artist photos
-   served from MinIO) + headline stats. Click "Concerts" for the full list (`/concerts`).
-2. Filter `/concerts?city=Singapore` — second load is served from Redis (note the
-   cache key in `redis-cli MONITOR`).
-3. Open a concert detail page — the setlist & reviews come from MongoDB;
-   the view counter `concert:{id}:views` increments in Redis.
-4. Log in as `macc@example.com` / `password`.
-5. Book a ticket → BEFORE INSERT trigger decrements `tickets.available_seats`.
-6. Try to book more seats than are available → trigger raises, transaction
-   rolls back, app shows a safe error.
-7. Cancel a booking from `/my/bookings` → AFTER UPDATE trigger restores the
-   seats to `tickets.available_seats`.
-8. Post a review with a photo → text + photo metadata go into `gigtrack.reviews`
-   in Mongo; the image file goes to the MinIO `gigtrack-media` bucket. Browse it
-   in the MinIO console at `http://localhost:9001` (minioadmin / minioadmin).
-9. Follow / unfollow an artist → M:N row inserted into `follows`.
-10. Like a review (👍) → toggles your id in the review's `liked_by` set; liking
-    twice is a no-op (no duplicate counts). Delete your own review → its photos
-    are removed from MinIO too.
-11. **Admin** (log in as `macc`) → `/admin`: create/edit/delete concerts and
-    ticket tiers, and view/edit/disable/delete user accounts.
-12. Run the performance benchmark (see below).
+A full 10-minute video script for 6 presenters is in
+[`docs/presentation_demo.md`](docs/presentation_demo.md); live CLI scenarios for
+all four datastores are in [`docs/demo_cli.md`](docs/demo_cli.md).
+
+1. Landing page (`/`) — hero + category tiles + featured rail (artist photos from MinIO).
+2. Browse `/concerts?genre=Pop&city=Singapore` — filtered listing; second load served from Redis cache.
+3. Concert detail — lineup + tiers from MySQL; setlist & reviews from MongoDB; Redis view counter ticks.
+4. Log in as a customer → book tickets with the **+/- stepper**; try to exceed **6 per concert** → blocked with an error.
+5. Oversell attempt → `BEFORE INSERT` trigger rolls back; cancel a booking → `AFTER UPDATE` trigger restores seats.
+6. Post a review with a photo → text/metadata in Mongo, image blob in MinIO (show the MinIO console).
+7. Like a review twice → count doesn't double (per-user `liked_by` set).
+8. Log in as **admin** (`macc`) → `/admin`: add a concert with a new artist/venue + tiers (VIP-pricing rule enforced); search bookings; resize/cancel a customer booking.
+9. Run `scripts/benchmark.py` → cached vs uncached, indexed vs scan, CPU/memory.
 
 ## Running the benchmark
 
-The benchmark times Redis-cached vs uncached MySQL, indexed vs full-scan (MySQL
-and Mongo), latency percentiles (p50/p95/p99), throughput, **CPU time per call**
-and **peak memory**, then writes `scripts/benchmark_results.csv` and
-`scripts/benchmark_latency.png`.
-
-It needs the datastores running and the same env the app uses.
-
-**Inside the running stack (easiest):**
+Times Redis-cached vs uncached MySQL, indexed vs full-scan (MySQL & Mongo),
+latency percentiles (p50/p95/p99), throughput, **CPU time per call** and
+**peak memory** → `scripts/benchmark_results.csv` + `scripts/benchmark_latency.png`.
 
 ```bash
+# Inside the running stack (easiest):
 docker compose exec app python scripts/benchmark.py --iterations 300
-# copy the results out of the container if you want them on the host:
 docker compose cp app:/app/scripts/benchmark_results.csv ./scripts/
 docker compose cp app:/app/scripts/benchmark_latency.png ./scripts/
-```
 
-**Locally (datastores in Docker, see "local Flask" setup above):**
-
-```bash
-docker compose up -d mysql mongo redis minio   # if not already up
-pip install -r requirements.txt                # brings in matplotlib + psutil
-export PYTHONPATH=$PWD/app                      # so 'import db' resolves
-# .env must point at the remapped host ports (3307/27018/6380) — see above
+# Or locally (datastores in Docker, .env on the remapped ports):
+export PYTHONPATH=$PWD/app
 python scripts/benchmark.py --iterations 300
 ```
 
-`--iterations` sets how many calls per scenario (higher = smoother numbers,
-default 300). Sample output:
+Sample output:
 
 ```
-GigTrack benchmark — 300 iterations each
-
 scenario                               avg       p50       p95       p99  cpu/call      ops/s
 ---------------------------------------------------------------------------------------------
 MySQL trending (uncached)            1.842     1.701     2.910     4.220    0.4100      542.8
@@ -207,40 +197,33 @@ MySQL indexed (status)               0.610     0.560     0.980     1.510    0.18
 MySQL unindexed (base_price)         1.430     1.330     2.210     3.020    0.2600      699.3
 Mongo indexed (concert_id)           0.540     0.500     0.860     1.220    0.1500     1851.9
 Mongo unindexed (rating)             1.190     1.110     1.880     2.540    0.2200      840.3
-MySQL payload LIMIT 5                 1.220     1.150     1.910     2.610    0.3200      819.7
-MySQL payload LIMIT 20               1.840     1.700     2.880     4.010    0.4100      543.5
-MySQL payload LIMIT 50               2.910     2.700     4.520     6.330    0.5800      343.6
 
 Client process: peak memory ≈ 78.4 MB, avg CPU ≈ 12.0%
 ```
 
-(Numbers are illustrative — they depend on your machine.) The headline result
-is the Redis-cached row being ~20–30× faster than the uncached MySQL join, plus
-indexed beating full-scan on both stores. The same data is written to
-`scripts/benchmark_results.csv` and charted in `scripts/benchmark_latency.png`.
-
-Outputs land in `scripts/`. `--iterations` controls how many calls per scenario
-(higher = smoother numbers).
+(Numbers depend on your machine.) Headline: Redis cache ~20–30× faster than the
+uncached join; indexed lookups beat full scans on both stores.
 
 ## Security notes
 
-- All SQL uses **parameterized queries** (no string interpolation) → safe from injection.
-- Passwords are **bcrypt**-hashed (unique salt per user). Sessions are random tokens in Redis.
-- **CSRF tokens** on every state-changing form; **SameSite/HttpOnly** cookies; `Secure` cookie when `FLASK_ENV=production`.
-- `debug` is off unless `FLASK_DEBUG=1`; set a real `FLASK_SECRET` in production.
-- Uploaded images are type-checked, size-capped (5 MB) and re-encoded/downscaled before storage.
+- All SQL uses **parameterised queries** (no string interpolation) → injection-safe.
+- Passwords are **bcrypt**-hashed (unique salt per user); sessions are random tokens in Redis.
+- **CSRF tokens** on every state-changing form; **HttpOnly/SameSite** cookies; `Secure` when `FLASK_ENV=production`.
+- `debug` is off unless `FLASK_DEBUG=1`; set a real `FLASK_SECRET` outside dev.
+- Uploaded images are type-checked, size-capped (5 MB) and downscaled before storage.
 
 ## Mapping to the project brief
 
-| Brief item | Where to find it |
+| Brief item | Where |
 |---|---|
-| Task 1 — application | This README + slides |
-| Task 2 — dataset      | Larger synthetic seed (`scripts/generate_seed.py`); optional Kaggle import |
+| Task 1 — application | This README + `docs/presentation_demo.md` |
+| Task 2 — dataset | Synthetic seed (`scripts/generate_seed.py`); optional Kaggle import |
 | Task 3 — ER + NoSQL schema | `docs/er_diagram.mermaid`, `docs/schema_design.md` |
-| Task 4 — CRUD (SQL + NoSQL, all wired into the app) | SQL: signup/booking/profile/admin + `sql/queries.sql` (A); Mongo: review create/read/like/delete + `mongo/queries.py` |
-| Task 5 — complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (D nested, G window, H CTE, I transaction, E triggers); Mongo `$facet` + `$lookup` in `mongo/queries.py` |
-| Task 6 — GenAI reflection | Add to final report |
-| Task 7 — perf analysis | `scripts/benchmark.py` (cache, index-vs-scan, percentiles, throughput, payload scaling) → CSV + chart |
-| Task 8 — web UI + admin | `app/` + `/admin` dashboard |
-| Data organization & security | `docs/schema_design.md`; Security notes above |
-| Object storage | `app/storage.py` + MinIO; blobs in storage, pointers in Mongo (`docs/schema_design.md` §4) |
+| Task 4 — CRUD (SQL + NoSQL, wired into the app) | signup/booking/profile/admin + `sql/queries.sql`; review create/read/like/delete + `mongo/queries.py` |
+| Task 5 — complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (nested, window, CTE, transaction, triggers); Mongo `$facet` + `$lookup` |
+| Task 6 — GenAI reflection | Final report (see `docs/report_structure.md`) |
+| Task 7 — performance | `scripts/benchmark.py` → CSV + chart |
+| Task 8 — web UI + admin | `app/` + `/admin` |
+| Data organisation & security | `docs/schema_design.md`; Security notes above |
+| Object storage | `app/storage.py` + MinIO |
+```
