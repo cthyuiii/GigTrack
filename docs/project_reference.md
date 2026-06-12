@@ -18,8 +18,8 @@ A file-by-file rundown of the codebase and a dependency overview.
 ### `sql/` — relational layer (MySQL)
 | File | Purpose |
 |---|---|
-| `schema.sql` | 8 tables (`users`, `artists`, `venues`, `concerts`, `concert_artists`, `tickets`, `bookings`, `follows`) with primary/foreign keys, `CHECK` constraints, indexes, and **2 triggers** (decrement seats on booking; restore seats on cancellation). |
-| `seed.sql` | **Generated** sample data (don't hand-edit — see `scripts/generate_seed.py`). 21 users, 30 artists, 15 venues, 50 concerts, 103 ticket tiers, ~180 bookings, 220 follows. |
+| `schema.sql` | 8 tables (`users`, `artists`, `venues`, `concerts`, `concert_artists`, `tickets`, `bookings`, `follows`) with primary/foreign keys, `CHECK` constraints, indexes, and **4 triggers** (decrement seats on booking; restore seats on cancellation *or refund*; VIP-pricing rule on ticket insert and update). |
+| `seed.sql` | **Generated** sample data (don't hand-edit — see `scripts/generate_seed.py`). 21 users, 30 artists, 15 venues, 50 concerts, 116 ticket tiers, ~176 bookings, 220 follows. Respects all business rules (seat availability, VIP pricing, 6-ticket quota, no admin bookings). |
 | `queries.sql` | Reference queries: CRUD, joins, aggregation, nested/correlated subqueries, **window functions**, **CTE**, **explicit transaction**, **trigger demos**, a view, and an `EXPLAIN`. |
 
 ### `mongo/` — document layer (MongoDB)
@@ -31,13 +31,13 @@ A file-by-file rundown of the codebase and a dependency overview.
 ### `app/` — Flask application
 | File | Purpose |
 |---|---|
-| `app.py` | All routes + logic: auth (signup/login/logout with bcrypt + Redis sessions), CSRF protection, landing/browse, concert & artist pages, booking, reviews (with photo upload + image validation), like-toggle (dedup via `$addToSet`), profile, the **admin dashboard** (concert/ticket/user CRUD), info pages, healthcheck, and the Redis→MySQL view-count flush. |
+| `app.py` | All routes + logic: auth (signup/login/logout with bcrypt + sliding Redis sessions), CSRF protection, landing/browse, concert & artist pages, booking (quota + insert in one locking transaction), reviews (with photo upload + image validation), like-toggle (dedup via `$addToSet`), profile, the **admin dashboard** (concert/ticket/user CRUD with app-level cascades into Mongo/MinIO on delete), info pages, healthcheck, and the Redis→MySQL view-count flush. |
 | `db.py` | Loads `.env`, builds the MySQL config + Mongo/Redis singletons, and exposes `query_all` / `query_one` / `execute` / `get_mysql` helpers. |
 | `storage.py` | S3-compatible (MinIO/AWS/R2) helper: `ensure_bucket`, `upload_fileobj`, `public_url`, `presigned_url`, `delete`. Holds the media *bytes*; the DB keeps only URL pointers. |
 | `static/style.css` | The full UI theme (dark blue Ticketmaster-style), layout, and keyframe animations. |
 | `templates/base.html` | Shared layout: sticky header, city dropdown, flash messages, multi-column footer. |
 | `templates/landing.html` | Hero + search + trending cards (the `/` page). |
-| `templates/home.html` | Full concert listing (`/concerts`), city-filterable. |
+| `templates/home.html` | Full concert listing (`/concerts`) — filterable by city, genre, and time window (Upcoming / Past / All); always in date order. |
 | `templates/concert_detail.html` | Concert info, lineup, tickets/booking, setlist + reviews (star widget, photo upload, like/delete). |
 | `templates/artist_detail.html` | Artist bio, image, follow button, upcoming shows. |
 | `templates/login.html` / `signup.html` / `profile.html` | Centered auth + profile forms. |
@@ -50,7 +50,14 @@ A file-by-file rundown of the codebase and a dependency overview.
 |---|---|
 | `generate_seed.py` | Writes `sql/seed.sql` — deterministic synthetic data. Run when you want to change data volume/shape. |
 | `fetch_artist_images.py` | Downloads a real placeholder portrait per artist (from Pravatar) and uploads it to MinIO, setting `artists.image_url`. Concurrent and idempotent; a fetch failure just leaves the gradient placeholder. (Replaced the old AI image generator; `generate_images.py` remains only as a deprecated shim that forwards here.) |
-| `benchmark.py` | Performance benchmark: cache vs uncached, index vs scan (MySQL + Mongo), latency percentiles, throughput, **CPU time/call**, **peak memory** → `benchmark_results.csv` + `benchmark_latency.png`. |
+| `benchmark.py` | Performance benchmark in **six groups**: `[reads]` cache vs uncached + index vs scan (MySQL + Mongo) + payload scaling; `[point]` access-time ladder (MySQL PK vs Mongo unique index vs Redis GET); `[compute]` server-side work (GROUP BY, window fn, `$group`, `$lookup`, `$facet`); `[writes]` per-store write latency incl. **trigger overhead** (bookings INSERT vs plain INSERT); `[txn]` 1-commit vs 50-commit batching; `[parallel]` multi-threaded throughput. Reports latency percentiles, ops/s, **CPU time/call**, **peak memory** → `benchmark_results.csv` + `benchmark_latency.png`. Write scenarios self-clean (scratch table dropped, seats restored). Flags: `--iterations`, `--workers`, `--skip-writes`. |
+
+### `tests/` — logic tests (pytest)
+| File | Purpose |
+|---|---|
+| `conftest.py` | Adds `app/` to the import path; fixtures for the Flask test client, CSRF-prepared client, and fake customer/admin Redis sessions; auto-skip logic when datastores are down. |
+| `test_unit.py` | Pure-logic tests, **no Docker needed**: redirect guard, date decoration, image validation/downscaling, error mapping, business constants. |
+| `test_integration.py` | Against live datastores: seat triggers (book/oversell/cancel/refund), VIP trigger, 6-ticket quota via the real route, CSRF rejection, Mongo like idempotency, concert-delete cross-store cascade, headliner-lineup sync, browse caching, sliding session TTL. Self-cleaning. |
 
 ### `docs/`
 | File | Purpose |
@@ -58,7 +65,10 @@ A file-by-file rundown of the codebase and a dependency overview.
 | `er_diagram.mermaid` | Entity-relationship diagram (Mermaid). |
 | `schema_design.md` | Why each datastore is used; schemas + the SQL↔NoSQL boundary discussion. |
 | `data_flow.svg` | Sequence diagram of signup/login/book/review/logout across all four stores. |
+| `flow_diagrams.md` | Mermaid flow diagrams (login/session, booking+trigger, review/photo, caching, delete cascade, architecture) for slides & demo. |
 | `demo_cli.md` | How to open each datastore's CLI + before/after demo scenarios. |
+| `presentation_demo.md` | 10-minute video script, equal 6-way speaker split. |
+| `report_structure.md` | Content outlines for the progress + final reports. |
 | `project_reference.md` | This document. |
 
 ## Dependencies and why they're here

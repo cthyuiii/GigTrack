@@ -18,10 +18,12 @@ uses four datastores, each for what it's best at:
 
 - Ticketmaster-style landing page: full-width hero, featured grid, category
   tiles (from DB genres), and a "more shows" rail.
-- Browse + filter concerts by **city and/or genre** (Redis-cached).
+- Browse + filter concerts by **city, genre, and time window** (upcoming /
+  past / all) — listings are shown **sequentially by date** and Redis-cached.
 - Concert detail with lineup, tiered tickets, MongoDB setlist & reviews.
 - Customer flow: sign up, log in, book tickets (**max 6 per concert**, enforced
-  by a DB query), review with photos, like/unlike, follow artists.
+  in a single locking DB transaction — race-safe), review with photos,
+  like/unlike, follow artists.
 - **Admin dashboard**: create/edit/delete concerts and ticket tiers (add new
   artists/venues on the fly), manage bookings (resize/cancel), manage users
   (edit/disable/delete), with search on every list. Admins can't buy tickets.
@@ -43,11 +45,14 @@ anything already running locally. **The app is on `5001`, not 5000.**
 
 ## Prerequisites & installation
 
-You need **Docker** (it provides the four datastores). For the
-all-in-Docker run that's the only requirement; for the local-Flask run you also
-need **Python 3.11+**.
+Three ways to run, pick one:
 
-**Install Docker Desktop** (includes Docker Compose):
+1. **Native install (no Docker)** — install the four datastores yourself +
+   **Python 3.11+**. First section below.
+2. **All in Docker** — Docker is the only requirement.
+3. **Hybrid** — datastores in Docker, Flask local (Python 3.11+ as well).
+
+**Install Docker Desktop** (only for options 2–3; includes Docker Compose):
 
 - macOS: <https://docs.docker.com/desktop/install/mac-install/> — or `brew install --cask docker`
 - Windows (WSL2): <https://docs.docker.com/desktop/install/windows-install/>
@@ -55,68 +60,10 @@ need **Python 3.11+**.
 
 Verify: `docker --version` and `docker compose version`.
 
-**Python (only for the local-Flask option):** 3.11+ from <https://www.python.org/downloads/>
+**Python (options 1 and 3):** 3.11+ from <https://www.python.org/downloads/>
 (macOS: `brew install python`). Verify: `python3 --version`.
 
-## Quick start — all in Docker (recommended)
-
-The only prerequisite is Docker. No `.env` needed — `docker-compose.yml`
-injects every variable into the app container.
-
-```bash
-docker compose up --build
-# First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
-open http://localhost:5001          # Linux: xdg-open, Windows: start
-```
-
-Sample logins (password is `password` for everyone):
-
-- **Admin:** `macc@example.com` / `password` → Admin dashboard at `/admin`
-- Regular users: `user02@example.com` … `user21@example.com`
-
-> **Artist photos.** On boot `scripts/fetch_artist_images.py` downloads a real
-> placeholder portrait per artist (from Pravatar — free, no API key, no rate
-> limit) and uploads it to MinIO. If a photo can't be fetched the card keeps a
-> gradient placeholder. Re-run without a reboot:
-> `docker compose exec app python scripts/fetch_artist_images.py --force`
-
-> **Changed the schema or seed?** MySQL only runs `schema.sql`/`seed.sql` on a
-> *fresh* data volume, so a plain `--build` keeps the OLD data. Reset volumes to
-> reseed:
->
-> ```bash
-> docker compose down -v && docker compose up --build
-> ```
-
-## Quick start — local Flask, datastores in Docker
-
-Run the datastores in Docker (they auto-seed) but run Flask on your machine for
-faster iteration. `.env.example` is already set to the remapped host ports, so
-just copy it — no edits needed.
-
-```bash
-# 1. Start ONLY the datastores (MySQL auto-loads schema.sql + seed.sql).
-docker compose up -d mysql mongo redis minio
-
-# 2. Copy the env file (no editing required — it matches the ports above).
-cp .env.example .env
-
-# 3. (Recommended) create a virtualenv, then install deps.
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# 4. Seed Mongo + create the MinIO bucket + fetch artist photos.
-#    Every script loads .env automatically (python-dotenv).
-export PYTHONPATH=$PWD/app                            # Windows (PowerShell): $env:PYTHONPATH="$PWD/app"
-python mongo/seed.py
-python app/storage.py                  # creates the MinIO bucket
-python scripts/fetch_artist_images.py  # real portraits → MinIO
-
-# 5. Run the app (local Flask defaults to port 5000).
-flask --app app/app.py run             # → http://localhost:5000
-```
-
-## Run fully without Docker (native install)
+## Quick start — native install (no Docker)
 
 Install the four datastores natively, then run Flask against them. Commands are
 shown for **macOS (Homebrew)** and **Ubuntu/Debian (apt)**; Windows users can
@@ -230,6 +177,64 @@ flask --app app/app.py run              # → http://localhost:5000
 `.env` is loaded automatically by every entry point (python-dotenv) and is
 gitignored — never commit real secrets.
 
+## Alternative — all in Docker
+
+The only prerequisite is Docker. No `.env` needed — `docker-compose.yml`
+injects every variable into the app container.
+
+```bash
+docker compose up --build
+# First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
+open http://localhost:5001          # Linux: xdg-open, Windows: start
+```
+
+Sample logins (password is `password` for everyone):
+
+- **Admin:** `macc@example.com` / `password` → Admin dashboard at `/admin`
+- Regular users: `user02@example.com` … `user21@example.com`
+
+> **Artist photos.** On boot `scripts/fetch_artist_images.py` downloads a real
+> placeholder portrait per artist (from Pravatar — free, no API key, no rate
+> limit) and uploads it to MinIO. If a photo can't be fetched the card keeps a
+> gradient placeholder. Re-run without a reboot:
+> `docker compose exec app python scripts/fetch_artist_images.py --force`
+
+> **Changed the schema or seed?** MySQL only runs `schema.sql`/`seed.sql` on a
+> *fresh* data volume, so a plain `--build` keeps the OLD data. Reset volumes to
+> reseed:
+>
+> ```bash
+> docker compose down -v && docker compose up --build
+> ```
+
+## Quick start — local Flask, datastores in Docker
+
+Run the datastores in Docker (they auto-seed) but run Flask on your machine for
+faster iteration. `.env.example` is already set to the remapped host ports, so
+just copy it — no edits needed.
+
+```bash
+# 1. Start ONLY the datastores (MySQL auto-loads schema.sql + seed.sql).
+docker compose up -d mysql mongo redis minio
+
+# 2. Copy the env file (no editing required — it matches the ports above).
+cp .env.example .env
+
+# 3. (Recommended) create a virtualenv, then install deps.
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 4. Seed Mongo + create the MinIO bucket + fetch artist photos.
+#    Every script loads .env automatically (python-dotenv).
+export PYTHONPATH=$PWD/app                            # Windows (PowerShell): $env:PYTHONPATH="$PWD/app"
+python mongo/seed.py
+python app/storage.py                  # creates the MinIO bucket
+python scripts/fetch_artist_images.py  # real portraits → MinIO
+
+# 5. Run the app (local Flask defaults to port 5000).
+flask --app app/app.py run             # → http://localhost:5000
+```
+
 ## Project layout
 
 ```
@@ -239,6 +244,7 @@ gigtrack/
 │   ├── data_flow.svg            Sequence diagram across the 4 datastores
 │   ├── schema_design.md         Datastore rationale + SQL↔NoSQL discussion
 │   ├── demo_cli.md              CLI cheat-sheet + per-store demo scenarios
+│   ├── flow_diagrams.md         Mermaid flow diagrams for presentation/demo
 │   ├── presentation_demo.md     10-min video script (6 presenters)
 │   ├── report_structure.md      Proposal + final report outlines
 │   └── project_reference.md     File-by-file + dependency reference
@@ -259,6 +265,10 @@ gigtrack/
 │   ├── generate_seed.py         Writes the synthetic sql/seed.sql
 │   ├── fetch_artist_images.py   Real portraits → MinIO → artists.image_url
 │   └── benchmark.py             Perf benchmark → CSV + chart
+├── tests/
+│   ├── conftest.py              Fixtures (test client, fake sessions, skip logic)
+│   ├── test_unit.py             Pure-logic tests (no Docker needed)
+│   └── test_integration.py      Triggers/quota/cascade/cache tests (stack up)
 ├── docker-compose.yml
 ├── Dockerfile
 └── requirements.txt
@@ -280,11 +290,57 @@ all four datastores are in [`docs/demo_cli.md`](docs/demo_cli.md).
 8. Log in as **admin** (`macc`) → `/admin`: add a concert with a new artist/venue + tiers (VIP-pricing rule enforced); search bookings; resize/cancel a customer booking.
 9. Run `scripts/benchmark.py` → cached vs uncached, indexed vs scan, CPU/memory.
 
-## Running the benchmark
+## Running the performance benchmark
 
-Times Redis-cached vs uncached MySQL, indexed vs full-scan (MySQL & Mongo),
-latency percentiles (p50/p95/p99), throughput, **CPU time per call** and
-**peak memory** → `scripts/benchmark_results.csv` + `scripts/benchmark_latency.png`.
+Correctness is covered by `pytest` (see the next section); **database performance**
+(compute, access time, write cost, concurrency) is covered by
+`scripts/benchmark.py`. It measures **six groups** of scenarios — every one
+reports avg/p50/p95/p99 latency, throughput (ops/s) and client **CPU time per
+call**, plus **peak memory** for the run:
+
+| Group | What it measures | Scenarios |
+|---|---|---|
+| `[reads]` | Caching & indexing on the read path | uncached 3-table join vs Redis cache; indexed vs full-scan (MySQL **and** Mongo); payload scaling (LIMIT 5/20/50) |
+| `[point]` | **Access time** — fetch one record by key on each store | MySQL PRIMARY KEY lookup vs Mongo unique-index `find_one` vs Redis `GET` |
+| `[compute]` | **Server-side computation** (engine does the work, not the client) | MySQL `GROUP BY` revenue join, window function (`RANK` per city); Mongo `$group`, `$lookup` join, `$facet` dashboard |
+| `[writes]` | **Write latency** per store + trigger cost | Redis `SET`, Mongo `insert_one`, MySQL plain `INSERT`, MySQL `INSERT` into `bookings` (fires the seat trigger — the delta vs plain INSERT ≈ trigger overhead) |
+| `[txn]` | Commit/fsync overhead | 50 INSERTs in **1 commit** vs 50 INSERTs in **50 commits** (latency per 50-row batch) |
+| `[parallel]` | Throughput under concurrency | trending read hammered by N threads (default 8), cached vs uncached — aggregate ops/s |
+
+### Why these benchmark cases are required
+
+Every architectural decision in GigTrack is a performance claim, and each
+group exists to back one of those claims with a number instead of an assertion:
+
+- **`[reads]`** — we claim Redis caching and our indexes (incl. the composite
+  `(status, concert_date)`) are worth their complexity. Cached-vs-uncached and
+  indexed-vs-full-scan are the only honest way to show *by how much*; payload
+  scaling shows whether latency is per-row or per-roundtrip.
+- **`[point]`** — we put sessions and counters in Redis rather than MySQL.
+  That's only justified if a Redis GET measurably beats a PK lookup; this
+  ladder quantifies the gap that motivates the whole polyglot design.
+- **`[compute]`** — we push aggregation into the engines (`GROUP BY`, window
+  functions, `$facet`, `$lookup`) instead of computing in Python. The
+  `cpu/call ≪ avg` gap is the evidence the server, not the client, did the
+  work — i.e. the queries scale with the DB, not the app process.
+- **`[writes]`** — triggers aren't free: every booking INSERT also locks and
+  updates a ticket row. Measuring INSERT-with-trigger against a plain INSERT
+  prices that integrity guarantee, so "we chose triggers" is an informed
+  trade-off rather than a guess.
+- **`[txn]`** — the seed loader and any future bulk import depend on batching.
+  One commit vs fifty shows the per-commit (fsync/roundtrip) cost and justifies
+  why `generate_seed.py` emits multi-row INSERTs.
+- **`[parallel]`** — single-threaded latency hides contention. A real app
+  serves concurrent users; this group shows whether throughput scales with
+  workers and how much further the cache pulls ahead under load.
+
+(They also directly serve the brief's optional Task 7 — "database performance
+analysis, e.g., speed and memory usage" — which is why CPU-per-call and peak
+memory are reported alongside latency.)
+
+Write scenarios are **self-cleaning**: the scratch table is dropped, bench
+bookings are deleted, and seats are restored. `--skip-writes` gives a
+read-only run.
 
 ```bash
 # Inside the running stack (easiest):
@@ -295,30 +351,93 @@ docker compose cp app:/app/scripts/benchmark_latency.png ./scripts/
 # Or locally (datastores in Docker, .env on the remapped ports):
 export PYTHONPATH=$PWD/app
 python scripts/benchmark.py --iterations 300
+python scripts/benchmark.py --iterations 300 --workers 16   # heavier concurrency
+python scripts/benchmark.py --skip-writes                   # read-only run
 ```
 
-Sample output:
+Output: a grouped table on stdout, `scripts/benchmark_results.csv` (with a
+`group` column) and a colour-coded log-scale chart
+`scripts/benchmark_latency.png`. Illustrative excerpt (numbers depend on your
+machine):
 
 ```
-scenario                               avg       p50       p95       p99  cpu/call      ops/s
----------------------------------------------------------------------------------------------
-MySQL trending (uncached)            1.842     1.701     2.910     4.220    0.4100      542.8
-Redis cached                         0.071     0.064     0.118     0.190    0.0300    14084.5
-MySQL indexed (status)               0.610     0.560     0.980     1.510    0.1800     1639.3
-MySQL unindexed (base_price)         1.430     1.330     2.210     3.020    0.2600      699.3
-Mongo indexed (concert_id)           0.540     0.500     0.860     1.220    0.1500     1851.9
-Mongo unindexed (rating)             1.190     1.110     1.880     2.540    0.2200      840.3
-
-Client process: peak memory ≈ 78.4 MB, avg CPU ≈ 12.0%
+[reads]
+MySQL trending (uncached)            1.842   …      542.8 ops/s
+Redis cached                         0.071   …    14084.5 ops/s
+[point]
+MySQL point (PRIMARY KEY)            0.520   …
+Redis point (GET)                    0.045   …
+[writes]
+MySQL write (plain INSERT)           1.10    …
+MySQL write (INSERT + trigger)       1.65    …   ← delta ≈ trigger cost
+[txn]
+MySQL 50 INSERTs / 1 commit          12.4    …   (per 50-row batch)
+MySQL 50 INSERTs / 50 commits        58.9    …
 ```
 
-(Numbers depend on your machine.) Headline: Redis cache ~20–30× faster than the
-uncached join; indexed lookups beat full scans on both stores.
+Headlines to expect: Redis ~20–30× faster than the uncached join; indexed
+lookups beat full scans on both stores; one big commit beats fifty small ones;
+`cpu/call` ≪ `avg` on the `[compute]` group proves the DB engine (not the
+client) did the work.
+
+## Running the logic tests
+
+The test suite (`tests/`) has two layers:
+
+| Layer | File | Needs Docker? | What it covers |
+|---|---|---|---|
+| **Unit** | `tests/test_unit.py` | No | Pure logic: open-redirect guard, date decoration, image validation/downscaling, error-message mapping, business constants. |
+| **Integration** | `tests/test_integration.py` | Yes (datastores) | Real business rules end-to-end: seat triggers (book/oversell/cancel/refund), VIP-pricing trigger, the 6-ticket quota via the live route, CSRF rejection, Mongo like-idempotency, cross-store cascade on concert delete, headliner-lineup sync, Redis caching, sliding session TTL. |
+
+### Why these test cases are required
+
+Each test exists because something specific breaks silently without it:
+
+| Test case(s) | Why it's required |
+|---|---|
+| Seat trigger: book / oversell / cancel / refund | The triggers are the **core integrity guarantee** of the whole app — money and inventory. A wrong trigger doesn't throw errors; it quietly corrupts `available_seats` (overselling a venue, or leaking seats on every refund — a real bug this suite caught). Only a before/after seat-count assertion proves rollback and restore actually happen. |
+| VIP-pricing trigger | Business rules enforced *in the database* (not the app) can only be verified by attempting a violating INSERT and asserting the DB rejects it — app-level checks could pass while the trigger is broken or missing after a reseed. |
+| 6-ticket quota via the live route | The quota spans **multiple rows and tiers** (a `SUM` across bookings), so no single constraint can enforce it — and it was previously race-prone. Driving the real route proves the locking transaction, not just the SQL, is correct. |
+| Cross-store cascade on concert delete | MongoDB has **no foreign keys into MySQL** — nothing in any engine stops orphaned setlists/reviews/photo-blobs. The only safety net for the logical-FK boundary is a test that deletes and counts what's left. |
+| Headliner-lineup sync | `concerts.headline_artist_id` and the slot-1 `concert_artists` row store the **same fact twice** (denormalisation). Anything stored twice can disagree; the test pins the sync code that keeps them consistent. |
+| Mongo like-idempotency | "Helpful count" is derived from a set — if `$addToSet`/`$pull` were ever swapped for `$inc`, double-counting returns. The test encodes the invariant: liking twice = liking once. |
+| CSRF rejection | Security controls fail **open**: if the guard is accidentally removed, every form still works and nothing visibly breaks. A test that asserts a token-less POST gets 400 is the only thing that notices. |
+| Redis caching + sliding session TTL | Cache bugs are invisible (the page still renders — just slowly, or stale), and a non-sliding session logs users out mid-demo. Asserting the cache key is written and the TTL refreshes makes both observable. |
+| Open-redirect guard, image validation (unit) | Input-handling edge cases (`//evil.com`, `/\evil.com`, fake/oversized images) are exactly what attackers and markers try first; pure-logic tests cover them in milliseconds with no Docker. |
+| Business constants (unit) | Docs, templates and seed generator all assume max-6 tickets / 30-min sessions / upload caps. The test fails loudly if a constant changes so the dependents get updated together. |
+
+Two further reasons the suite earns its place: it's the **regression net** for
+the brief's evolving deliverables (every bug fixed during development got a
+test so it can't return), and it's **proof of executability** for the
+source-code submission — a marker can run `pytest` and watch the database
+guarantees demonstrate themselves.
+
+Integration tests **skip themselves automatically** if the datastores aren't
+reachable, so a plain `pytest` is always safe. Every test cleans up after
+itself — running against the seeded dev database is fine.
+
+```bash
+# One-time setup (same venv as the app):
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+
+# Unit tests only — no Docker needed:
+pytest tests/test_unit.py
+
+# Full suite — start the datastores first:
+docker compose up -d mysql mongo redis minio
+pytest
+
+# Or run inside the app container (all-Docker setup):
+docker compose exec app pytest
+```
 
 ## Security notes
 
 - All SQL uses **parameterised queries** (no string interpolation) → injection-safe.
-- Passwords are **bcrypt**-hashed (unique salt per user); sessions are random tokens in Redis.
+- Passwords are **bcrypt**-hashed (unique salt per user); sessions are random tokens
+  in Redis with a **sliding 30-min idle timeout** (refreshed on each request).
 - **CSRF tokens** on every state-changing form; **HttpOnly/SameSite** cookies; `Secure` when `FLASK_ENV=production`.
 - `debug` is off unless `FLASK_DEBUG=1`; set a real `FLASK_SECRET` outside dev.
 - Uploaded images are type-checked, size-capped (5 MB) and downscaled before storage.
@@ -333,8 +452,8 @@ uncached join; indexed lookups beat full scans on both stores.
 | Task 4 — CRUD (SQL + NoSQL, wired into the app) | signup/booking/profile/admin + `sql/queries.sql`; review create/read/like/delete + `mongo/queries.py` |
 | Task 5 — complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (nested, window, CTE, transaction, triggers); Mongo `$facet` + `$lookup` |
 | Task 6 — GenAI reflection | Final report (see `docs/report_structure.md`) |
-| Task 7 — performance | `scripts/benchmark.py` → CSV + chart |
+| Task 7 — performance | `scripts/benchmark.py` (6 groups: reads, point lookup, compute, writes incl. trigger cost, txn batching, concurrency) → CSV + chart |
 | Task 8 — web UI + admin | `app/` + `/admin` |
 | Data organisation & security | `docs/schema_design.md`; Security notes above |
 | Object storage | `app/storage.py` + MinIO |
-```
+| Correctness verification | `tests/` (pytest) — unit + integration; see "Running the logic tests" |

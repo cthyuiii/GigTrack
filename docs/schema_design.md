@@ -16,9 +16,20 @@ Used for **transactional, structured data with clear referential integrity**: id
 | `follows` | M:N user ↔ artist relationship | M:N |
 
 Key constraints:
-- `ticket.available_seats >= 0` enforced by trigger on `bookings` insert.
-- Cascade delete from `concerts` → `tickets` → soft-handle `bookings` (status=`cancelled`) rather than hard delete.
-- Composite PKs on `concert_artists` and `follows`.
+- Seat inventory enforced by **4 triggers**: `BEFORE INSERT` on `bookings`
+  decrements `available_seats` (raises SQLSTATE 45000 on oversell, rolling the
+  transaction back); `AFTER UPDATE` restores seats on `confirmed → cancelled`
+  **or** `confirmed → refunded`; a `BEFORE INSERT`/`BEFORE UPDATE` pair on
+  `tickets` enforces the VIP-pricing rule. `CHECK` constraints
+  (`available_seats >= 0`, `<= total_seats`) backstop everything.
+- Deleting a `concert` cascades to `tickets` and `concert_artists` via FKs;
+  `bookings` are protected (FK RESTRICT), so a concert with bookings can't be
+  hard-deleted — cancel the bookings first (which restores seats via trigger).
+- The booking **quota** (max 6 per user per concert) is checked and inserted in
+  ONE locking transaction (`SELECT … FOR UPDATE` on the concert's ticket rows),
+  so concurrent requests can't race past the limit.
+- Composite PKs on `concert_artists` and `follows`. Editing a concert's
+  headliner re-syncs the slot-1 `concert_artists` row in the same transaction.
 
 ## 2. Document layer (MongoDB)
 
@@ -83,7 +94,7 @@ Justification: photo arrays and tag arrays are variable-length; body is unstruct
 | Key pattern | Type | Purpose | TTL |
 |---|---|---|---|
 | `concert:{id}:views` | counter | pending view delta; drained into MySQL `concerts.view_count` by `flush_view_counts()` before any view-ordered list renders (GETDEL = atomic, lossless) | none |
-| `browse:{city}:{genre}` | string (JSON) | cached concert listing per filter combination | 5 min |
+| `browse:{when}:{city}:{genre}` | string (JSON) | cached concert listing per filter combination (`when` = upcoming / past / all; results in date order) | 5 min |
 | `cities:list` / `genres:list` | string (JSON) | distinct cities / genres for the filter dropdown & category tiles | 1 hr |
 | `session:{token}` | string (user_id) | auth session | 30 min |
 
@@ -109,4 +120,4 @@ The demo uses a public-read bucket policy so `<img src>` works directly; `storag
 
 - Mongo documents reference MySQL rows by integer `concert_id` / `user_id` / `artist_id`. This is a **logical foreign key** — Mongo does not enforce it; the application layer does.
 - The two designs are **independent but reconciled at the app layer**. This is the realistic enterprise pattern and is the discussion point for project task 5.
-- Pros of independence: each store optimizes for its access pattern; schema evolution in Mongo doesn't require migrations in MySQL. Cons: dangling references possible; we need to handle "concert deleted but setlist still exists" (we'll cascade in app code).
+- Pros of independence: each store optimizes for its access pattern; schema evolution in Mongo doesn't require migrations in MySQL. Cons: dangling references are possible, so the app **implements the cascade itself**: deleting a concert also deletes its Mongo setlists/reviews and their MinIO photo blobs; deleting a user deletes their reviews/photos and pulls them from all `liked_by` sets (see `admin_concert_delete` / `admin_user_delete` in `app/app.py`, and `docs/flow_diagrams.md` §5). Covered by `tests/test_integration.py`.

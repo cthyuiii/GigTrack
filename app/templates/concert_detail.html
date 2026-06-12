@@ -78,7 +78,7 @@
     </section>
 
     <section class="setlist">
-      <h2>Setlist <span class="muted">(MongoDB)</span></h2>
+      <h2>Setlist</h2>
       {% if setlist and setlist.songs %}
         <ol>
           {% for s in setlist.songs %}
@@ -102,7 +102,8 @@
     </section>
 
     <section class="reviews">
-      <h2>Reviews <span class="muted">(MongoDB)</span></h2>
+      <h2>Reviews</h2>
+      <p class="muted reviews-tagline">Past concert goer's experience</p>
       {% if g.user %}
         <form class="review-form" method="post" enctype="multipart/form-data"
               action="{{ url_for('post_review', concert_id=concert.concert_id) }}">

@@ -34,7 +34,10 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV") == "production",
-    MAX_CONTENT_LENGTH=8 * 1024 * 1024,   # reject request bodies > 8 MB
+    # Generous request-body cap: a review may carry several photos (each
+    # individually capped at MAX_IMAGE_BYTES = 5 MB and downscaled), so the
+    # total must comfortably exceed one image or multi-photo posts 413.
+    MAX_CONTENT_LENGTH=24 * 1024 * 1024,  # reject request bodies > 24 MB
 )
 
 log = logging.getLogger("gigtrack")
@@ -43,6 +46,10 @@ TRENDING_TTL = 5 * 60   # seconds; TTL for cached browse/listing payloads
 
 # Max tickets one customer may hold per concert (across all tiers).
 MAX_TICKETS_PER_CONCERT = 6
+
+# Session lifetime (seconds). Refreshed on every authenticated request
+# (sliding expiry), so this is an idle timeout, not an absolute one.
+SESSION_TTL = 1800
 
 
 def booked_qty_for_concert(user_id, concert_id):
@@ -180,6 +187,10 @@ def load_user():
                 redis_client.delete(f"session:{token}")
                 session.pop("token", None)
                 g.user = None
+            elif g.user:
+                # Sliding expiry: each authenticated request refreshes the
+                # session TTL, so active users aren't logged out mid-task.
+                redis_client.expire(f"session:{token}", SESSION_TTL)
 
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -224,7 +235,7 @@ def login():
             return render_template("login.html")
         if row and bcrypt.checkpw(password, row["password_hash"].encode()):
             token = secrets.token_urlsafe(24)
-            redis_client.setex(f"session:{token}", 1800, row["user_id"])
+            redis_client.setex(f"session:{token}", SESSION_TTL, row["user_id"])
             session["token"] = token
             # Rotate the CSRF token on privilege change (login).
             session.pop("csrf", None)
@@ -234,8 +245,12 @@ def login():
 
 
 def _safe_next(target):
-    """Only honour relative same-site redirect targets (open-redirect guard)."""
-    if target and target.startswith("/") and not target.startswith("//"):
+    """Only honour relative same-site redirect targets (open-redirect guard).
+
+    Rejects protocol-relative forms: '//evil.com' and '/\\evil.com' (browsers
+    normalise backslashes to forward slashes, so '/\\' becomes '//')."""
+    if (target and target.startswith("/")
+            and not target.startswith("//") and "\\" not in target):
         return target
     return None
 
@@ -319,18 +334,28 @@ def get_genres():
 
 @app.route("/concerts")
 def browse():
-    """Full concert listing, optionally filtered by city and/or genre. Cached."""
+    """Full concert listing, filtered by city/genre and a time window
+    (upcoming / past / all). Always ordered sequentially by date. Cached."""
     city = request.args.get("city") or None
     genre = request.args.get("genre") or None
+    when = request.args.get("when") or "upcoming"
+    if when not in ("upcoming", "past", "all"):
+        when = "upcoming"
     flush_view_counts()
 
-    cache_key = f"browse:{city or '*'}:{genre or '*'}"
+    cache_key = f"browse:{when}:{city or '*'}:{genre or '*'}"
     cached = redis_client.get(cache_key)
     if cached:
         concerts = json.loads(cached)
     else:
-        where = ["c.status = 'scheduled'"]
+        # Cancelled shows are never listed; past shows are typically
+        # 'completed', so we filter by date rather than status.
+        where = ["c.status <> 'cancelled'"]
         params = []
+        if when == "upcoming":
+            where.append("c.concert_date > NOW()")
+        elif when == "past":
+            where.append("c.concert_date <= NOW()")
         if city:
             where.append("v.city = %s"); params.append(city)
         if genre:
@@ -344,7 +369,7 @@ def browse():
             JOIN   venues  v ON v.venue_id  = c.venue_id
             JOIN   artists a ON a.artist_id = c.headline_artist_id
             WHERE  """ + " AND ".join(where) + """
-            ORDER  BY c.view_count DESC, c.concert_date ASC
+            ORDER  BY c.concert_date ASC
             LIMIT  60
             """,
             tuple(params),
@@ -354,14 +379,11 @@ def browse():
                            json.dumps(concerts, default=str))
 
     return render_template("home.html", concerts=concerts, city=city,
-                           genre=genre, genres=get_genres())
+                           genre=genre, when=when, genres=get_genres())
 
 
 @app.route("/concerts/<int:concert_id>")
 def concert_detail(concert_id):
-    # Track view: increment Redis counter, batch-flush to MySQL elsewhere.
-    redis_client.incr(f"concert:{concert_id}:views")
-
     concert = query_one(
         """
         SELECT c.*, v.name AS venue, v.city, v.country,
@@ -376,6 +398,10 @@ def concert_detail(concert_id):
     )
     if not concert:
         abort(404)
+
+    # Track view AFTER the existence check, so hits on nonexistent concert
+    # IDs can't create junk Redis counter keys. Batch-flushed to MySQL.
+    redis_client.incr(f"concert:{concert_id}:views")
 
     lineup = query_all(
         """
@@ -488,30 +514,43 @@ def book_ticket(concert_id):
         flash(f"Please choose a quantity between 1 and {MAX_TICKETS_PER_CONCERT}.")
         return redirect(url_for("concert_detail", concert_id=concert_id))
 
-    # Per-concert quota, checked against the DB (sum of this user's confirmed
-    # tickets for this concert across all tiers).
-    already = booked_qty_for_concert(g.user["user_id"], concert_id)
-    if already + quantity > MAX_TICKETS_PER_CONCERT:
-        remaining = max(0, MAX_TICKETS_PER_CONCERT - already)
-        flash(f"Ticket limit reached: max {MAX_TICKETS_PER_CONCERT} per concert. "
-              f"You already have {already}; you can book {remaining} more.")
-        return redirect(url_for("concert_detail", concert_id=concert_id))
-
-    ticket = query_one(
-        "SELECT price FROM tickets WHERE ticket_id = %s AND concert_id = %s",
-        (ticket_id, concert_id),
-    )
-    if not ticket:
-        abort(400, "Bad ticket selection")
-
-    total = float(ticket["price"]) * quantity
+    # Quota + insert happen in ONE transaction. Locking this concert's ticket
+    # rows (FOR UPDATE) serialises concurrent bookings for the same concert,
+    # so two simultaneous requests can't both pass the quota check and
+    # overshoot the per-concert limit (the old check-then-insert race).
     try:
-        execute(
-            "INSERT INTO bookings (user_id, ticket_id, quantity, total_price) "
-            "VALUES (%s, %s, %s, %s)",
-            (g.user["user_id"], ticket_id, quantity, total),
-        )
-        flash(f"Booked {quantity} x ${ticket['price']}. Total ${total:.2f}.")
+        with get_mysql() as conn, conn.cursor() as cur:
+            cur.execute("SELECT ticket_id, price FROM tickets "
+                        "WHERE concert_id = %s FOR UPDATE", (concert_id,))
+            tiers = {row["ticket_id"]: row["price"] for row in cur.fetchall()}
+            if ticket_id not in tiers:
+                flash("Bad ticket selection.")
+                return redirect(url_for("concert_detail", concert_id=concert_id))
+
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(b.quantity), 0) AS qty
+                FROM   bookings b
+                JOIN   tickets  t ON t.ticket_id = b.ticket_id
+                WHERE  b.user_id = %s AND t.concert_id = %s
+                  AND  b.status = 'confirmed'
+                """,
+                (g.user["user_id"], concert_id),
+            )
+            already = int(cur.fetchone()["qty"])
+            if already + quantity > MAX_TICKETS_PER_CONCERT:
+                remaining = max(0, MAX_TICKETS_PER_CONCERT - already)
+                flash(f"Ticket limit reached: max {MAX_TICKETS_PER_CONCERT} per concert. "
+                      f"You already have {already}; you can book {remaining} more.")
+                return redirect(url_for("concert_detail", concert_id=concert_id))
+
+            total = float(tiers[ticket_id]) * quantity
+            cur.execute(
+                "INSERT INTO bookings (user_id, ticket_id, quantity, total_price) "
+                "VALUES (%s, %s, %s, %s)",
+                (g.user["user_id"], ticket_id, quantity, total),
+            )
+        flash(f"Booked {quantity} x ${tiers[ticket_id]}. Total ${total:.2f}.")
     except Exception:
         # The BEFORE INSERT trigger raises (SQLSTATE 45000) when seats are
         # insufficient. Log the real cause; tell the user something safe.
@@ -546,6 +585,10 @@ def toggle_follow(artist_id):
 @app.route("/concerts/<int:concert_id>/review", methods=["POST"])
 @login_required
 def post_review(concert_id):
+    # The concert must exist — otherwise a forged form could create orphan
+    # review documents for arbitrary concert IDs.
+    if not query_one("SELECT 1 FROM concerts WHERE concert_id = %s", (concert_id,)):
+        abort(404)
     try:
         rating = int(request.form["rating"])
     except (KeyError, ValueError):
@@ -917,6 +960,20 @@ def admin_concert_edit(concert_id):
                      request.form.get("status", "scheduled"),
                      float(request.form["base_price"]), concert_id),
                 )
+                # Keep the lineup junction in sync: if the headliner changed,
+                # the old slot-1 row would otherwise still show the previous
+                # artist as headliner on the detail page.
+                cur.execute(
+                    "DELETE FROM concert_artists WHERE concert_id=%s "
+                    "AND slot_order=1 AND artist_id<>%s",
+                    (concert_id, artist_id),
+                )
+                cur.execute(
+                    "INSERT INTO concert_artists (concert_id, artist_id, "
+                    "slot_order, role) VALUES (%s,%s,1,'headliner') "
+                    "ON DUPLICATE KEY UPDATE slot_order=1, role='headliner'",
+                    (concert_id, artist_id),
+                )
             _bust_trending_cache()
             flash("Concert updated.")
         except Exception as e:
@@ -942,11 +999,30 @@ def admin_concert_delete(concert_id):
     # tickets cascade via FK ON DELETE CASCADE; bookings reference tickets.
     try:
         execute("DELETE FROM concerts WHERE concert_id=%s", (concert_id,))
-        _bust_trending_cache()
-        flash("Concert deleted.")
     except Exception:
         log.exception("Concert delete failed for %s", concert_id)
         flash("Delete failed — there may be bookings referencing it.")
+        return redirect(url_for("admin_concerts"))
+
+    # SQL delete succeeded — cascade to the OTHER stores so we don't orphan
+    # data (Mongo has no FK into MySQL; this is the app-level cascade across
+    # the logical-FK boundary). Photo blobs first, then the documents.
+    try:
+        for review in mongo.reviews.find({"concert_id": concert_id}, {"photos": 1}):
+            for photo in review.get("photos", []):
+                if photo.get("key"):
+                    try:
+                        storage.delete(photo["key"])
+                    except Exception:
+                        log.exception("Failed to delete blob %s", photo.get("key"))
+        mongo.reviews.delete_many({"concert_id": concert_id})
+        mongo.setlists.delete_many({"concert_id": concert_id})
+    except Exception:
+        log.exception("NoSQL cleanup failed for concert %s", concert_id)
+
+    _bust_trending_cache()
+    redis_client.delete(f"concert:{concert_id}:views")
+    flash("Concert deleted (including its setlists, reviews and photos).")
     return redirect(url_for("admin_concerts"))
 
 
@@ -1039,10 +1115,29 @@ def admin_user_delete(user_id):
         return redirect(url_for("admin_users"))
     try:
         execute("DELETE FROM users WHERE user_id=%s", (user_id,))
-        flash("User deleted.")
     except Exception:
         log.exception("User delete failed for %s", user_id)
         flash("Delete failed — the user may have bookings on record.")
+        return redirect(url_for("admin_users"))
+
+    # App-level cascade across the logical-FK boundary: remove the user's
+    # reviews (and their photo blobs) and pull them from all like-sets, so no
+    # dangling user_id references remain in MongoDB.
+    try:
+        for review in mongo.reviews.find({"user_id": user_id}, {"photos": 1}):
+            for photo in review.get("photos", []):
+                if photo.get("key"):
+                    try:
+                        storage.delete(photo["key"])
+                    except Exception:
+                        log.exception("Failed to delete blob %s", photo.get("key"))
+        mongo.reviews.delete_many({"user_id": user_id})
+        mongo.reviews.update_many({"liked_by": user_id},
+                                  {"$pull": {"liked_by": user_id}})
+    except Exception:
+        log.exception("NoSQL cleanup failed for user %s", user_id)
+
+    flash("User deleted (including their reviews and photos).")
     return redirect(url_for("admin_users"))
 
 

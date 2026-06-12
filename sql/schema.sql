@@ -150,7 +150,10 @@ CREATE TRIGGER trg_booking_restore_seats_on_cancel
 AFTER UPDATE ON bookings
 FOR EACH ROW
 BEGIN
-  IF NEW.status = 'cancelled' AND OLD.status = 'confirmed' THEN
+  -- Both cancellations AND refunds release the seats back to inventory;
+  -- only the transition out of 'confirmed' restores (so flipping a booking
+  -- between cancelled and refunded can never double-restore).
+  IF NEW.status IN ('cancelled', 'refunded') AND OLD.status = 'confirmed' THEN
     UPDATE tickets
        SET available_seats = available_seats + OLD.quantity
      WHERE ticket_id = OLD.ticket_id;

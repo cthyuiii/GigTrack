@@ -3,20 +3,33 @@
 {% block content %}
   <div class="section-head">
     <h1>
+      {% if when == 'past' %}Past
+      {% elif when == 'all' %}All
+      {% else %}Upcoming{% endif %}
       {% if genre and city %}{{ genre }} in {{ city }}
       {% elif genre %}{{ genre }} concerts
-      {% elif city %}Upcoming in {{ city }}
-      {% else %}Upcoming concerts{% endif %}
+      {% elif city %}concerts in {{ city }}
+      {% else %}concerts{% endif %}
     </h1>
-    {% if city or genre %}<a href="{{ url_for('browse') }}">Clear filters</a>{% endif %}
+    {% if city or genre or when != 'upcoming' %}
+      <a href="{{ url_for('browse') }}">Clear filters</a>
+    {% endif %}
+  </div>
+
+  {# Time-window filter: upcoming / past / all — listing is always in date order #}
+  <div class="tiles tiles-sm">
+    {% for w, label in [('upcoming', 'Upcoming'), ('past', 'Past'), ('all', 'All dates')] %}
+      <a class="tile {{ 'tile-on' if when == w }}"
+         href="{{ url_for('browse', when=w, city=city, genre=genre) }}">{{ label }}</a>
+    {% endfor %}
   </div>
 
   {% if genres %}
     <div class="tiles tiles-sm">
-      <a class="tile {{ 'tile-on' if not genre }}" href="{{ url_for('browse', city=city) }}">All</a>
+      <a class="tile {{ 'tile-on' if not genre }}" href="{{ url_for('browse', when=when, city=city) }}">All genres</a>
       {% for gtag in genres %}
         <a class="tile {{ 'tile-on' if genre == gtag }}"
-           href="{{ url_for('browse', genre=gtag, city=city) }}">{{ gtag }}</a>
+           href="{{ url_for('browse', when=when, genre=gtag, city=city) }}">{{ gtag }}</a>
       {% endfor %}
     </div>
   {% endif %}

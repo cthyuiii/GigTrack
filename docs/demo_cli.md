@@ -76,8 +76,12 @@ docker run --rm --network gigtrack_default minio/mc sh -c \
    `SELECT view_count FROM concerts WHERE concert_id = <id>;` → the pending
    delta was flushed into `view_count` (and the Redis key reset).
 3. **Cache demo:** load `/concerts?city=Singapore`, then in Redis:
-   `KEYS browse:*` and `TTL browse:Singapore:*` → the cached list with a
-   ~300s TTL. The second page load is served from this key (watch with `MONITOR`).
+   `KEYS browse:*` and `TTL "browse:upcoming:Singapore:*"` → the cached list
+   with a ~300s TTL (key shape is `browse:<when>:<city>:<genre>`). The second
+   page load is served from this key (watch with `MONITOR`).
+4. **Time-window filter:** switch the listing to **Past** (`/concerts?when=past`)
+   → a separate cache key `browse:past:*:*` appears; the page shows completed
+   shows in date order.
 
 ## Scenario E — Admin  → MySQL
 

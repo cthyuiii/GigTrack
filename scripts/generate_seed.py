@@ -182,17 +182,24 @@ def main():
     num_tickets = ticket_id
 
     # ---- bookings (trigger decrements seats) ----
+    # Respects the app's business rules: max 6 confirmed tickets per user per
+    # concert (MAX_TICKETS_PER_CONCERT in app.py) and no bookings for the
+    # admin account (user_id 1) — admins can't buy tickets in the app.
     w("INSERT INTO bookings (user_id, ticket_id, quantity, total_price, status, booked_at) VALUES")
     rows = []
     seats_left = {tid: meta[2] for tid, meta in ticket_meta.items()}
+    quota = {}  # (user_id, concert_id) -> confirmed qty so far
     for _ in range(180):
         tid = rng.randint(1, num_tickets)
         if seats_left[tid] < 6:
             continue
         qty = rng.randint(1, 4)
-        seats_left[tid] -= qty
         cid, price, _ = ticket_meta[tid]
-        uid = rng.randint(1, NUM_USERS)
+        uid = rng.randint(2, NUM_USERS)            # skip admin (user_id 1)
+        if quota.get((uid, cid), 0) + qty > 6:     # per-concert quota
+            continue
+        quota[(uid, cid)] = quota.get((uid, cid), 0) + qty
+        seats_left[tid] -= qty
         total = price * qty
         month = rng.choice([1, 2, 3, 4, 5])
         day = rng.randint(1, 27)

@@ -39,7 +39,7 @@ Reuse parts of the progress report. The Database aspect is 40% and Application
 | 4. Relational implementation | CRUD coverage; constraints (FK, CHECK); **triggers** (seat inventory + VIP pricing); **advanced queries** (nested/correlated, window function, CTE, transaction); indexing. Short query snippets, not full dumps. | 1.5 |
 | 5. NoSQL implementation | Collections, indexes (incl. text index); CRUD via PyMongo; **aggregation** (`$facet`, `$lookup`); object storage for media (pointer-vs-blob pattern). | 1.0 |
 | 6. Application & system | Architecture (figure), request flow across the 4 stores, caching strategy, key features (booking quota, admin dashboard), and **security** (parameterised SQL, bcrypt, CSRF, cookies). | 1.0 |
-| 7. Performance evaluation | Benchmark methodology + results (cache vs uncached, indexed vs scan, percentiles, CPU/memory); the chart; brief analysis. | 0.75 |
+| 7. Performance evaluation | Benchmark methodology + results across the six groups (cache vs uncached, indexed vs scan, per-store point-lookup access time, server-side compute, write latency incl. trigger overhead, commit batching, concurrent throughput); percentiles + CPU/memory; the chart; brief analysis. Mention the correctness suite (`tests/`, pytest) one line — performance and correctness are tested separately. | 0.75 |
 | 8. GenAI reflection | How GenAI tools were used, pros/cons, and how to use them better next time. | 0.5 |
 | 9. Conclusion & future work | What was achieved; next steps (real dataset, payments, mobile). | 0.25 |
 | — Appendix (optional) | Non-critical extras, extra screenshots (≤10 advanced-feature screenshots for the source-code submission). | (extra) |
