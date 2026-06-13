@@ -5,8 +5,8 @@ Makes `app/` importable (so tests can `import app`, `import db`, …) without
 needing PYTHONPATH set manually, and provides shared fixtures.
 
 Two test layers:
-  tests/test_unit.py        — pure-logic tests, no datastores needed.
-  tests/test_integration.py — exercise MySQL/Mongo/Redis through the real
+  tests/test_unit.py        - pure-logic tests, no datastores needed.
+  tests/test_integration.py - exercise MySQL/Mongo/Redis through the real
                               code paths; auto-SKIPPED when the stack is down.
 
 Run everything (stack up, venv active):

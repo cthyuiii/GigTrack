@@ -1,4 +1,4 @@
-# GigTrack — Schema Design
+# GigTrack - Schema Design
 
 ## 1. Relational layer (MySQL)
 
@@ -24,7 +24,7 @@ Key constraints:
   (`available_seats >= 0`, `<= total_seats`) backstop everything.
 - Deleting a `concert` cascades to `tickets` and `concert_artists` via FKs;
   `bookings` are protected (FK RESTRICT), so a concert with bookings can't be
-  hard-deleted — cancel the bookings first (which restores seats via trigger).
+  hard-deleted - cancel the bookings first (which restores seats via trigger).
 - The booking **quota** (max 6 per user per concert) is checked and inserted in
   ONE locking transaction (`SELECT … FOR UPDATE` on the concert's ticket rows),
   so concurrent requests can't race past the limit.
@@ -73,7 +73,7 @@ Justification: setlist length varies wildly (10–40 songs), each song has optio
   "posted_at": "2026-03-15T09:14:00Z"
 }
 ```
-Justification: photo arrays and tag arrays are variable-length; body is unstructured text we may want full-text search on later. Likes are stored as a `liked_by: [user_id]` set and toggled with `$addToSet` / `$pull`, so the helpful-count is derived (`len(liked_by)`) and a user can never be double-counted — the document model makes this a single atomic update with no join table.
+Justification: photo arrays and tag arrays are variable-length; body is unstructured text we may want full-text search on later. Likes are stored as a `liked_by: [user_id]` set and toggled with `$addToSet` / `$pull`, so the helpful-count is derived (`len(liked_by)`) and a user can never be double-counted - the document model makes this a single atomic update with no join table.
 
 ### `artist_bios` collection
 ```json
@@ -102,7 +102,7 @@ All listing/filter caches are invalidated immediately when an admin creates, edi
 
 ## 4. Object storage (file uploads)
 
-Review photos (binary media) are stored in an **S3-compatible object store** — MinIO locally (`app/storage.py`, `gigtrack-media` bucket), swappable for AWS S3 / Cloudflare R2 by changing only the endpoint + credentials.
+Review photos (binary media) are stored in an **S3-compatible object store** - MinIO locally (`app/storage.py`, `gigtrack-media` bucket), swappable for AWS S3 / Cloudflare R2 by changing only the endpoint + credentials.
 
 **The blob lives in object storage; the database keeps only a pointer.** A review document in Mongo stores:
 ```json
@@ -118,6 +118,6 @@ The demo uses a public-read bucket policy so `<img src>` works directly; `storag
 
 ## 5. SQL ↔ NoSQL boundary
 
-- Mongo documents reference MySQL rows by integer `concert_id` / `user_id` / `artist_id`. This is a **logical foreign key** — Mongo does not enforce it; the application layer does.
+- Mongo documents reference MySQL rows by integer `concert_id` / `user_id` / `artist_id`. This is a **logical foreign key** - Mongo does not enforce it; the application layer does.
 - The two designs are **independent but reconciled at the app layer**. This is the realistic enterprise pattern and is the discussion point for project task 5.
 - Pros of independence: each store optimizes for its access pattern; schema evolution in Mongo doesn't require migrations in MySQL. Cons: dangling references are possible, so the app **implements the cascade itself**: deleting a concert also deletes its Mongo setlists/reviews and their MinIO photo blobs; deleting a user deletes their reviews/photos and pulls them from all `liked_by` sets (see `admin_concert_delete` / `admin_user_delete` in `app/app.py`, and `docs/flow_diagrams.md` §5). Covered by `tests/test_integration.py`.

@@ -3,7 +3,7 @@ Fetch a real portrait photo for each artist and store it in object storage
 (MinIO/S3), then point artists.image_url at the uploaded blob.
 
 This REPLACES the old AI image generation. Photos come from Pravatar
-(i.pravatar.cc) — a free set of ~70 real portrait avatars intended as
+(i.pravatar.cc) - a free set of ~70 real portrait avatars intended as
 placeholders. No API key, no rate limit, no per-image generation wait, so the
 whole batch finishes in a couple of seconds.
 
@@ -11,7 +11,7 @@ Note: the artists in this app are fictional; these are generic placeholder
 portraits, not photos of specific real, named musicians.
 
 The image BYTES still live in object storage and the database keeps only the
-URL pointer — so this keeps the blob-storage story intact while being fast and
+URL pointer - so this keeps the blob-storage story intact while being fast and
 reliable. Idempotent: an artist whose image_url already points at storage is
 skipped (use --force to refetch).
 
@@ -72,7 +72,7 @@ def _process_one(a):
 
 def main():
     if not storage.is_enabled():
-        print("Object storage disabled — skipping artist photos.")
+        print("Object storage disabled - skipping artist photos.")
         return
     storage.ensure_bucket()
     artists = query_all("SELECT artist_id, name, image_url FROM artists")

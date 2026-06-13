@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}GigTrack — concerts{% endblock %}
+{% block title %}GigTrack - concerts{% endblock %}
 {% block content %}
   <div class="section-head">
     <h1>
@@ -16,7 +16,7 @@
     {% endif %}
   </div>
 
-  {# Time-window filter: upcoming / past / all — listing is always in date order #}
+  {# Time-window filter: upcoming / past / all - listing is always in date order #}
   <div class="tiles tiles-sm">
     {% for w, label in [('upcoming', 'Upcoming'), ('past', 'Past'), ('all', 'All dates')] %}
       <a class="tile {{ 'tile-on' if when == w }}"

@@ -1,4 +1,4 @@
-# GigTrack — Project Reference
+# GigTrack - Project Reference
 
 A file-by-file rundown of the codebase and a dependency overview.
 
@@ -15,20 +15,20 @@ A file-by-file rundown of the codebase and a dependency overview.
 | `README.md` | Setup (Docker + local), ports, demo script, security notes, brief mapping. |
 | `LICENSE` | Licence text. |
 
-### `sql/` — relational layer (MySQL)
+### `sql/` - relational layer (MySQL)
 | File | Purpose |
 |---|---|
 | `schema.sql` | 8 tables (`users`, `artists`, `venues`, `concerts`, `concert_artists`, `tickets`, `bookings`, `follows`) with primary/foreign keys, `CHECK` constraints, indexes, and **4 triggers** (decrement seats on booking; restore seats on cancellation *or refund*; VIP-pricing rule on ticket insert and update). |
-| `seed.sql` | **Generated** sample data (don't hand-edit — see `scripts/generate_seed.py`). 21 users, 30 artists, 15 venues, 50 concerts, 116 ticket tiers, ~176 bookings, 220 follows. Respects all business rules (seat availability, VIP pricing, 6-ticket quota, no admin bookings). |
+| `seed.sql` | **Generated** sample data (don't hand-edit - see `scripts/generate_seed.py`). 21 users, 30 artists, 15 venues, 50 concerts, 116 ticket tiers, ~176 bookings, 220 follows. Respects all business rules (seat availability, VIP pricing, 6-ticket quota, no admin bookings). |
 | `queries.sql` | Reference queries: CRUD, joins, aggregation, nested/correlated subqueries, **window functions**, **CTE**, **explicit transaction**, **trigger demos**, a view, and an `EXPLAIN`. |
 
-### `mongo/` — document layer (MongoDB)
+### `mongo/` - document layer (MongoDB)
 | File | Purpose |
 |---|---|
 | `seed.py` | Seeds the `setlists`, `reviews`, `artist_bios` collections. Idempotent (skips if already populated unless `--force`); creates indexes incl. a text index. |
 | `queries.py` | Representative Mongo queries: CRUD, aggregation pipelines, full-text search, plus **`$facet`** (multi-metric in one pass) and **`$lookup`** (join reviews↔setlists). |
 
-### `app/` — Flask application
+### `app/` - Flask application
 | File | Purpose |
 |---|---|
 | `app.py` | All routes + logic: auth (signup/login/logout with bcrypt + sliding Redis sessions), CSRF protection, landing/browse, concert & artist pages, booking (quota + insert in one locking transaction), reviews (with photo upload + image validation), like-toggle (dedup via `$addToSet`), profile, the **admin dashboard** (concert/ticket/user CRUD with app-level cascades into Mongo/MinIO on delete), info pages, healthcheck, and the Redis→MySQL view-count flush. |
@@ -37,7 +37,7 @@ A file-by-file rundown of the codebase and a dependency overview.
 | `static/style.css` | The full UI theme (dark blue Ticketmaster-style), layout, and keyframe animations. |
 | `templates/base.html` | Shared layout: sticky header, city dropdown, flash messages, multi-column footer. |
 | `templates/landing.html` | Hero + search + trending cards (the `/` page). |
-| `templates/home.html` | Full concert listing (`/concerts`) — filterable by city, genre, and time window (Upcoming / Past / All); always in date order. |
+| `templates/home.html` | Full concert listing (`/concerts`) - filterable by city, genre, and time window (Upcoming / Past / All); always in date order. |
 | `templates/concert_detail.html` | Concert info, lineup, tickets/booking, setlist + reviews (star widget, photo upload, like/delete). |
 | `templates/artist_detail.html` | Artist bio, image, follow button, upcoming shows. |
 | `templates/login.html` / `signup.html` / `profile.html` | Centered auth + profile forms. |
@@ -45,14 +45,14 @@ A file-by-file rundown of the codebase and a dependency overview.
 | `templates/info.html` | Generic content page for footer links (About/Contact/etc.). |
 | `templates/admin/*.html` | Admin dashboard, concert list/form, user list/form. |
 
-### `scripts/` — tooling (not part of the running app)
+### `scripts/` - tooling (not part of the running app)
 | File | Purpose |
 |---|---|
-| `generate_seed.py` | Writes `sql/seed.sql` — deterministic synthetic data. Run when you want to change data volume/shape. |
+| `generate_seed.py` | Writes `sql/seed.sql` - deterministic synthetic data. Run when you want to change data volume/shape. |
 | `fetch_artist_images.py` | Downloads a real placeholder portrait per artist (from Pravatar) and uploads it to MinIO, setting `artists.image_url`. Concurrent and idempotent; a fetch failure just leaves the gradient placeholder. (Replaced the old AI image generator; `generate_images.py` remains only as a deprecated shim that forwards here.) |
 | `benchmark.py` | Performance benchmark in **six groups**: `[reads]` cache vs uncached + index vs scan (MySQL + Mongo) + payload scaling; `[point]` access-time ladder (MySQL PK vs Mongo unique index vs Redis GET); `[compute]` server-side work (GROUP BY, window fn, `$group`, `$lookup`, `$facet`); `[writes]` per-store write latency incl. **trigger overhead** (bookings INSERT vs plain INSERT); `[txn]` 1-commit vs 50-commit batching; `[parallel]` multi-threaded throughput. Reports latency percentiles, ops/s, **CPU time/call**, **peak memory** → `benchmark_results.csv` + `benchmark_latency.png`. Write scenarios self-clean (scratch table dropped, seats restored). Flags: `--iterations`, `--workers`, `--skip-writes`. |
 
-### `tests/` — logic tests (pytest)
+### `tests/` - logic tests (pytest)
 | File | Purpose |
 |---|---|
 | `conftest.py` | Adds `app/` to the import path; fixtures for the Flask test client, CSRF-prepared client, and fake customer/admin Redis sessions; auto-skip logic when datastores are down. |
@@ -76,16 +76,16 @@ A file-by-file rundown of the codebase and a dependency overview.
 ### Python packages (`requirements.txt`)
 | Package | Used for | Where |
 |---|---|---|
-| **Flask** | Web framework — routing, templating (Jinja2), sessions, request handling. | `app/app.py` |
+| **Flask** | Web framework - routing, templating (Jinja2), sessions, request handling. | `app/app.py` |
 | **PyMySQL** | Pure-Python MySQL driver. | `app/db.py` |
 | **pymongo** | MongoDB driver. | `app/db.py`, `mongo/*` |
 | **redis** | Redis client (sessions, cache, counters). | `app/db.py` |
 | **bcrypt** | Salted password hashing + verification. | `app/app.py` |
 | **python-dotenv** | Loads `.env` so the app + scripts share config. | `app/db.py` |
 | **boto3** | S3-compatible client for MinIO/AWS/R2 object storage. | `app/storage.py` |
-| **Pillow** | Image processing — validates/downscales uploaded review photos and normalises fetched artist portraits. | `app/app.py`, `scripts/fetch_artist_images.py` |
+| **Pillow** | Image processing - validates/downscales uploaded review photos and normalises fetched artist portraits. | `app/app.py`, `scripts/fetch_artist_images.py` |
 | **matplotlib** | Renders the benchmark latency chart (PNG). | `scripts/benchmark.py` |
-| **psutil** | Measures the benchmark's CPU % and peak memory. Optional — falls back to the stdlib `resource` module. | `scripts/benchmark.py` |
+| **psutil** | Measures the benchmark's CPU % and peak memory. Optional - falls back to the stdlib `resource` module. | `scripts/benchmark.py` |
 
 ### Backing services (containers in `docker-compose.yml`)
 | Service | Image | Role |

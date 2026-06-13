@@ -1,5 +1,5 @@
 """
-GigTrack — Sample MongoDB queries.
+GigTrack - Sample MongoDB queries.
 Each function corresponds to a representative MongoDB query used by the app.
 """
 import os
@@ -106,7 +106,7 @@ def setlist_summary(concert_id):
 
 
 def add_song_to_setlist(concert_id, song):
-    """Append a song to an existing setlist using $push — no schema migration needed."""
+    """Append a song to an existing setlist using $push - no schema migration needed."""
     return db.setlists.update_one(
         {"concert_id": concert_id},
         {"$push": {"songs": song}}
@@ -116,7 +116,7 @@ def add_song_to_setlist(concert_id, song):
 # ---- Advanced aggregation -----------------------------------------------
 
 def review_dashboard():
-    """$facet — compute several independent analytics in ONE pass over reviews.
+    """$facet - compute several independent analytics in ONE pass over reviews.
 
     Returns rating distribution, top tags, and overall stats together. $facet
     is the document-DB answer to running multiple GROUP BYs at once; the SQL
@@ -146,7 +146,7 @@ def review_dashboard():
 
 
 def concerts_with_setlist_and_reviews(min_rating=4):
-    """$lookup — join reviews to their setlist by concert_id (a NoSQL join).
+    """$lookup - join reviews to their setlist by concert_id (a NoSQL join).
 
     Demonstrates that MongoDB can relate collections server-side; we attach each
     concert's setlist to its highly-rated reviews and project a compact summary.

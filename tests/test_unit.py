@@ -1,5 +1,5 @@
 """
-Unit tests — pure logic, no datastores required.
+Unit tests - pure logic, no datastores required.
 
 Run:  pytest tests/test_unit.py
 (Only needs the Python deps from requirements.txt, not Docker.)

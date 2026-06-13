@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ concert.title }} — GigTrack{% endblock %}
+{% block title %}{{ concert.title }} - GigTrack{% endblock %}
 {% block content %}
   <article class="concert">
     <div class="concert-head">
@@ -29,7 +29,7 @@
     <section class="tickets">
       <h2>Tickets</h2>
       {% if g.user and g.user.is_admin %}
-        <p class="muted">You're signed in as an admin — ticket purchasing is for
+        <p class="muted">You're signed in as an admin - ticket purchasing is for
         customer accounts. Manage bookings in the
         <a href="{{ url_for('admin_bookings') }}">admin dashboard</a>.</p>
       {% elif g.user %}
@@ -85,7 +85,7 @@
             <li>
               {{ s.title }}
               {% if s.cover_of %}<span class="muted">(cover of {{ s.cover_of }})</span>{% endif %}
-              {% if s.notes %}<span class="muted">— {{ s.notes }}</span>{% endif %}
+              {% if s.notes %}<span class="muted">- {{ s.notes }}</span>{% endif %}
             </li>
           {% endfor %}
         </ol>
@@ -122,7 +122,7 @@
 
           <textarea name="body" placeholder="How was the gig?" rows="3" required></textarea>
           <input name="tags" placeholder="tags, comma, separated">
-          <label class="muted">Photos (optional, JPG/PNG/WebP, &le;5&nbsp;MB each — auto-resized):
+          <label class="muted">Photos (optional, JPG/PNG/WebP, &le;5&nbsp;MB each - auto-resized):
             <input name="photos" type="file" accept="image/*" multiple>
           </label>
           <button>Post review</button>

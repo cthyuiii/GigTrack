@@ -1,19 +1,19 @@
 -- ============================================================
--- GigTrack — Sample SQL queries
+-- GigTrack - Sample SQL queries
 -- CRUD, joins, aggregation, nested/correlated subqueries, window
 -- functions, CTEs, transactions, and trigger demonstrations.
 -- Each block is independently runnable after schema.sql + seed.sql.
 -- ============================================================
 
 -- ------------------------------------------------------------
--- (A) CRUD — basic
+-- (A) CRUD - basic
 -- ------------------------------------------------------------
 
--- A1. Create — register a new user
+-- A1. Create - register a new user
 INSERT INTO users (username, email, password_hash, home_city)
 VALUES ('new_user', 'new@example.com', '$2b$12$placeholderhash', 'Singapore');
 
--- A2. Read — get a single concert with venue + headliner name
+-- A2. Read - get a single concert with venue + headliner name
 SELECT c.concert_id, c.title, c.concert_date,
        v.name AS venue, v.city,
        a.name AS headliner
@@ -22,17 +22,17 @@ JOIN   venues  v ON v.venue_id  = c.venue_id
 JOIN   artists a ON a.artist_id = c.headline_artist_id
 WHERE  c.concert_id = 1;
 
--- A3. Update — change a concert status
+-- A3. Update - change a concert status
 UPDATE concerts
 SET    status = 'sold_out'
 WHERE  concert_id = 6;
 
--- A4. Delete — remove a follow
+-- A4. Delete - remove a follow
 DELETE FROM follows
 WHERE  user_id = 2 AND artist_id = 3;
 
 -- ------------------------------------------------------------
--- (B) Joins — many-to-many resolution
+-- (B) Joins - many-to-many resolution
 -- ------------------------------------------------------------
 
 -- B1. Full lineup for a concert (headliner + support), ordered
@@ -55,7 +55,7 @@ GROUP  BY c.concert_id, c.title, c.concert_date, v.name
 ORDER  BY c.concert_date;
 
 -- ------------------------------------------------------------
--- (C) Aggregation — revenue & engagement reporting
+-- (C) Aggregation - revenue & engagement reporting
 -- ------------------------------------------------------------
 
 -- C1. Revenue by concert (only confirmed bookings)
@@ -90,7 +90,7 @@ WHERE  (SELECT COUNT(*) FROM follows f WHERE f.artist_id = a.artist_id) >
         ) sub);
 
 -- D2. Users who have booked into every concert headlined by an artist they follow
---     (relational division pattern — classic "for every" using NOT EXISTS)
+--     (relational division pattern - classic "for every" using NOT EXISTS)
 SELECT DISTINCT u.username
 FROM   users u
 JOIN   follows f ON f.user_id = u.user_id
@@ -124,13 +124,13 @@ ORDER  BY pct_left;
 -- (E) Trigger demonstrations
 -- ------------------------------------------------------------
 
--- E1. Successful booking — trigger decrements available_seats
+-- E1. Successful booking - trigger decrements available_seats
 SELECT available_seats AS before_seats FROM tickets WHERE ticket_id = 1;
 INSERT INTO bookings (user_id, ticket_id, quantity, total_price)
 VALUES (2, 1, 3, 264.00);
 SELECT available_seats AS after_seats  FROM tickets WHERE ticket_id = 1;
 
--- E2. Oversell attempt — trigger raises and transaction is rolled back
+-- E2. Oversell attempt - trigger raises and transaction is rolled back
 -- Expected error: 'Not enough seats available for this ticket tier'
 INSERT INTO bookings (user_id, ticket_id, quantity, total_price)
 VALUES (1, 10, 5, 375.00);
@@ -154,7 +154,7 @@ JOIN   venues  v ON v.venue_id  = c.venue_id
 JOIN   artists a ON a.artist_id = c.headline_artist_id;
 
 -- ------------------------------------------------------------
--- (G) Window functions — ranking & running totals (MySQL 8.0+)
+-- (G) Window functions - ranking & running totals (MySQL 8.0+)
 -- ------------------------------------------------------------
 
 -- G1. Rank concerts by revenue WITHIN each city (partitioned window).
@@ -184,7 +184,7 @@ WHERE  b.status = 'confirmed'
 ORDER  BY b.booked_at;
 
 -- ------------------------------------------------------------
--- (H) Common Table Expression (CTE) — readable multi-step query
+-- (H) Common Table Expression (CTE) - readable multi-step query
 -- ------------------------------------------------------------
 
 -- H1. Artists whose average headliner-show rating beats the global average.
@@ -213,7 +213,7 @@ WHERE  at.total_revenue > (SELECT AVG(total_revenue) FROM artist_totals)
 ORDER  BY at.total_revenue DESC;
 
 -- ------------------------------------------------------------
--- (I) Explicit transaction — atomic multi-statement money move
+-- (I) Explicit transaction - atomic multi-statement money move
 -- ------------------------------------------------------------
 
 -- I1. Refund a booking atomically: mark refunded AND log it. Either both
@@ -226,7 +226,7 @@ START TRANSACTION;
 COMMIT;
 
 -- ------------------------------------------------------------
--- (J) EXPLAIN — show the optimizer using our indexes
+-- (J) EXPLAIN - show the optimizer using our indexes
 -- ------------------------------------------------------------
 
 -- J1. Confirms idx_concerts_status_date is used for the home/trending query.

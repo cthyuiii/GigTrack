@@ -3,7 +3,7 @@ Object storage helper (S3-compatible).
 
 Backs binary media (review photos) with an S3-compatible object store.
 Defaults target the local MinIO container from docker-compose, but the same
-code works unchanged against AWS S3 / Cloudflare R2 / Backblaze B2 — only the
+code works unchanged against AWS S3 / Cloudflare R2 / Backblaze B2 - only the
 endpoint + credentials change.
 
 Design: the BLOB lives here; the database keeps only a POINTER.
@@ -123,7 +123,7 @@ def public_url(key):
 
 
 def presigned_url(key, expires=3600):
-    """Time-limited signed GET URL — the private-bucket alternative."""
+    """Time-limited signed GET URL - the private-bucket alternative."""
     return _get_client().generate_presigned_url(
         "get_object",
         Params={"Bucket": S3_BUCKET, "Key": key},
@@ -138,7 +138,7 @@ def delete(key):
 
 
 if __name__ == "__main__":
-    # `python app/storage.py` — used by docker-compose to pre-create the bucket.
+    # `python app/storage.py` - used by docker-compose to pre-create the bucket.
     logging.basicConfig(level=logging.INFO)
     if is_enabled():
         ensure_bucket()

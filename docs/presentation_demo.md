@@ -1,4 +1,4 @@
-# GigTrack — Presentation & Demo Script
+# GigTrack - Presentation & Demo Script
 
 Target: **≤ 10 minutes**, all **6 members present**, video recording. Put each
 speaker's **name + SIT email** on their slides (bottom-left). Last slide =
@@ -8,14 +8,14 @@ Suggested structure follows the submission brief: (1) background/objectives,
 (2) data & datasets, (3) database implementation + demo, (4) application
 implementation + demo.
 
-Roles below are a starting split — adjust to your team. Keep slides light;
+Roles below are a starting split - adjust to your team. Keep slides light;
 talk to the demo, don't read bullet points.
 
 ---
 
 ## Segment plan (6 speakers, equal 1:35 each, ~10 min)
 
-The work is split **equally** — every member presents 1:35.
+The work is split **equally** - every member presents 1:35.
 
 | # | Speaker | Section | Time | Flow diagram (`flow_diagrams.md`) |
 |---|---|---|---|---|
@@ -28,27 +28,27 @@ The work is split **equally** — every member presents 1:35.
 
 Total = 9:30, leaving buffer. Practice transitions ("Thanks A, over to B…").
 Render the Mermaid diagrams in `docs/flow_diagrams.md` to PNG (mermaid.live)
-and drop one onto each segment's slide — a flow picture beats a bullet list.
+and drop one onto each segment's slide - a flow picture beats a bullet list.
 
 ---
 
-## 1 — Hook & product pitch (Member A)
+## 1 - Hook & product pitch (Member A)
 
 **Sell it as a product, not a school project.**
 
 - Hook: "Fans discover gigs across a dozen apps, lose their ticket emails, and
-  forget the setlist a week later. GigTrack is one home for the whole journey —
+  forget the setlist a week later. GigTrack is one home for the whole journey -
   discover, book, and remember."
 - Value proposition (one line): *the live-music companion that tracks the gig
   from discovery to memory.*
 - Who it's for: concert-goers (customers) and promoters/operators (admins).
 - Why it's interesting technically: it genuinely needs **both** relational and
-  non-relational data, plus caching and object storage — a realistic polyglot
+  non-relational data, plus caching and object storage - a realistic polyglot
   stack, not a toy CRUD app.
 - Show: the landing page (hero, category tiles, featured rail) for 5 seconds so
   the audience sees a real, polished product.
 
-## 2 — Data & datasets + data model (Member B)
+## 2 - Data & datasets + data model (Member B)
 
 - Datasets: a synthetic but realistic catalogue (21 users, 30 artists, 15 real
   venues, 50 concerts, 116 ticket tiers, ~176 bookings, 220 follows),
@@ -56,64 +56,64 @@ and drop one onto each segment's slide — a flow picture beats a bullet list.
   real portraits served from object storage. Mention the path to swap in a
   Kaggle/Setlist.fm dataset.
 - Show the **ER diagram** (`docs/er_diagram.mermaid`): point out the three
-  relationship types — 1:N (venue→concerts), M:N via junctions
+  relationship types - 1:N (venue→concerts), M:N via junctions
   (`concert_artists`, `follows`), and the **logical FK** from MongoDB docs back
   to MySQL rows.
 - Show the **architecture diagram** (`docs/data_flow.svg`): one request often
   touches MySQL (truth) + MongoDB (rich content) + Redis (speed) + MinIO (media).
 - State the design principle: *each store does what it's best at.*
 
-## 3 — Relational layer + integrity (Member C) — LIVE
+## 3 - Relational layer + integrity (Member C) - LIVE
 
 Open a `mysql` CLI beside the browser (`docs/demo_cli.md`).
 
 - Walk the schema briefly: 8 tables, FKs, CHECK constraints, indexes.
-- **Trigger 1 — seat inventory:** book a ticket in the UI; show
+- **Trigger 1 - seat inventory:** book a ticket in the UI; show
   `available_seats` drop in SQL. Then attempt to oversell → the `BEFORE INSERT`
   trigger raises and the transaction rolls back (seats unchanged). Cancel a
-  booking → `AFTER UPDATE` trigger restores seats (refunds restore too —
+  booking → `AFTER UPDATE` trigger restores seats (refunds restore too -
   same trigger, both status transitions out of `confirmed`).
-- **Trigger 2 — VIP pricing rule:** in the admin form, try to add a VIP tier
+- **Trigger 2 - VIP pricing rule:** in the admin form, try to add a VIP tier
   cheaper than GA → rejected ("VIP cannot be priced lower than other tiers").
 - Mention an advanced query: the revenue-per-city leaderboard using a
   **window function** (`sql/queries.sql` G1).
 
-## 4 — NoSQL + object storage (Member D) — LIVE
+## 4 - NoSQL + object storage (Member D) - LIVE
 
 Open a `mongosh` CLI and the MinIO console.
 
 - Why MongoDB: setlists vary 10–40 songs with optional fields; reviews have
-  variable tags/photos — natural documents, no nullable-column sprawl.
+  variable tags/photos - natural documents, no nullable-column sprawl.
 - Post a review **with a photo**: show the new document in `mongosh`
-  (`photos: [{url, key}]`) and the uploaded object in the MinIO bucket — the
+  (`photos: [{url, key}]`) and the uploaded object in the MinIO bucket - the
   bytes live in storage, the DB keeps the pointer.
 - Like the review twice → `helpful_count` doesn't double (per-user `liked_by`
   set, `$addToSet`). 
 - Mention an advanced pipeline: `$facet` rating dashboard / `$lookup` join
   (`mongo/queries.py`).
 
-## 5 — Customer journey (Member E) — LIVE
+## 5 - Customer journey (Member E) - LIVE
 
-- Sign up → log in (bcrypt verify; Redis session token — show `KEYS session:*`).
-- Browse with **city + genre + time-window filters** (Upcoming / Past / All —
+- Sign up → log in (bcrypt verify; Redis session token - show `KEYS session:*`).
+- Browse with **city + genre + time-window filters** (Upcoming / Past / All -
   results in date order); reload to show the Redis cache hit
   (`redis-cli MONITOR`).
 - Book tickets with the **+/- stepper**; then try to exceed **6 per concert** →
   clear on-screen error. The quota check and the insert run in ONE locking
-  transaction (race-safe — two parallel requests can't both sneak past).
+  transaction (race-safe - two parallel requests can't both sneak past).
 - Follow an artist (M:N), check "My bookings", cancel one (seats released).
 
-## 6 — Admin, security, performance + wrap (Member F) — LIVE
+## 6 - Admin, security, performance + wrap (Member F) - LIVE
 
 - Admin dashboard: create a concert, **adding a brand-new artist and venue via
   the tick-boxes** (injected to the DB in one transaction) with date/time
   pickers and inline ticket tiers. Use the **search** on bookings; resize and
   cancel a customer booking. Delete a (booking-free) concert → its Mongo
   setlists/reviews and MinIO photos are cascaded away too (`flow_diagrams.md`
-  §5) — the app-level cascade across the SQL↔NoSQL boundary.
+  §5) - the app-level cascade across the SQL↔NoSQL boundary.
 - Security one-liner: parameterised SQL (injection-safe), bcrypt, CSRF tokens,
   hardened cookies, admins can't buy.
-- Performance: show `benchmark.py` output (six groups) — Redis cache ~20–30×
+- Performance: show `benchmark.py` output (six groups) - Redis cache ~20–30×
   faster than the uncached join; indexed vs full-scan; the point-lookup ladder
   (MySQL PK vs Mongo vs Redis); write latency incl. the **trigger's measured
   cost**; 1-commit vs 50-commit batching; multi-threaded throughput. Show the
@@ -125,11 +125,11 @@ Open a `mongosh` CLI and the MinIO console.
 
 ## Pre-recording checklist
 
-- [ ] `docker compose down -v && docker compose up --build`, confirm <http://localhost:5001> loads with images.
+- [ ] `docker compose down -v && docker compose up --build`, confirm <http://localhost:5000> loads with images.
 - [ ] One terminal each: `mysql`, `mongosh`, `redis-cli`, MinIO console open.
 - [ ] Use a fresh customer account so the 6-ticket limit demo is clean.
 - [ ] Pre-run `benchmark.py` once so numbers/chart are ready to show.
-- [ ] Run `pytest` once on camera-day morning — green tests are a nice closing slide.
+- [ ] Run `pytest` once on camera-day morning - green tests are a nice closing slide.
 - [ ] Export the Mermaid diagrams in `flow_diagrams.md` to PNG for the slides.
 - [ ] Every slide has presenter name + SIT email; final slide = team-lead email.
 - [ ] Time a full rehearsal; trim to stay under 10:00.

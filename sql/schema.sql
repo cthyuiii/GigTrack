@@ -73,7 +73,7 @@ CREATE TABLE concerts (
   INDEX idx_concerts_status_date (status, concert_date)
 ) ENGINE=InnoDB;
 
--- M:N junction — supporting artists / festival lineups
+-- M:N junction - supporting artists / festival lineups
 CREATE TABLE concert_artists (
   concert_id  INT NOT NULL,
   artist_id   INT NOT NULL,

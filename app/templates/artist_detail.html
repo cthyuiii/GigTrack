@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ artist.name }} — GigTrack{% endblock %}
+{% block title %}{{ artist.name }} - GigTrack{% endblock %}
 {% block content %}
   <div class="concert-head">
     {% if artist.image_url %}
@@ -25,7 +25,7 @@
         <h3>Tour history</h3>
         <ul>
           {% for t in bio.tour_history %}
-            <li>{{ t.year }} — {{ t.name }} <span class="muted">({{ t.regions|join(', ') }})</span></li>
+            <li>{{ t.year }} - {{ t.name }} <span class="muted">({{ t.regions|join(', ') }})</span></li>
           {% endfor %}
         </ul>
       {% endif %}
@@ -39,7 +39,7 @@
         {% for c in upcoming %}
           <li>
             <a href="{{ url_for('concert_detail', concert_id=c.concert_id) }}">{{ c.title }}</a>
-            <span class="muted">— {{ c.city }} ·
+            <span class="muted">- {{ c.city }} ·
               {{ c.concert_date.strftime('%d %b %Y') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}
             </span>
           </li>

@@ -1,5 +1,5 @@
 # Keep the build context clean and prevent a local .env (with localhost ports)
-# from leaking into the image — compose injects the correct env at runtime.
+# from leaking into the image - compose injects the correct env at runtime.
 .env
 .git
 .gitignore

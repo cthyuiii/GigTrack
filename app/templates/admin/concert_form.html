@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin · {{ 'Edit' if concert else 'New' }} concert — GigTrack{% endblock %}
+{% block title %}Admin · {{ 'Edit' if concert else 'New' }} concert - GigTrack{% endblock %}
 {% block content %}
   <h1>{{ 'Edit concert' if concert else 'New concert' }}</h1>
   <p class="muted"><a href="{{ url_for('admin_concerts') }}">← Back to concerts</a></p>
@@ -37,7 +37,7 @@
         </div>
         <select name="venue_id" class="existing-venue">
           {% for v in venues %}
-            <option value="{{ v.venue_id }}" {% if concert and concert.venue_id == v.venue_id %}selected{% endif %}>{{ v.name }} — {{ v.city }}</option>
+            <option value="{{ v.venue_id }}" {% if concert and concert.venue_id == v.venue_id %}selected{% endif %}>{{ v.name }} - {{ v.city }}</option>
           {% endfor %}
         </select>
         <div id="new-venue" class="new-entity" hidden>

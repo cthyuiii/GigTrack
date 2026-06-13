@@ -1,4 +1,4 @@
-# GigTrack — Flow Diagrams (for slides & demo)
+# GigTrack - Flow Diagrams (for slides & demo)
 
 Mermaid diagrams of the key request flows, one per demo scenario. Paste into
 [mermaid.live](https://mermaid.live) (or any Mermaid renderer) to export PNG/SVG
@@ -7,7 +7,7 @@ for the slides. Each diagram maps to a presenter segment in
 
 ---
 
-## 1. Login & session flow — *Member E segment / Scenario A*
+## 1. Login & session flow - *Member E segment / Scenario A*
 
 Redis-backed sessions with bcrypt verification and a **sliding** 30-minute
 idle timeout.
@@ -40,7 +40,7 @@ sequenceDiagram
 
 ---
 
-## 2. Ticket booking — quota + seat trigger — *Member C segment / Scenario B*
+## 2. Ticket booking - quota + seat trigger - *Member C segment / Scenario B*
 
 The quota check and the INSERT run in **one locking transaction**; the
 `BEFORE INSERT` trigger enforces inventory atomically and rolls back on
@@ -65,7 +65,7 @@ flowchart TD
 
 ---
 
-## 3. Review with photo — pointer vs blob — *Member D segment / Scenario C*
+## 3. Review with photo - pointer vs blob - *Member D segment / Scenario C*
 
 Bytes go to object storage; both databases keep only pointers.
 
@@ -91,12 +91,12 @@ sequenceDiagram
 
     Note over U,D: like toggle = one atomic update
     U->>F: POST /reviews/<id>/like
-    F->>D: $addToSet / $pull liked_by (idempotent — never double-counts)
+    F->>D: $addToSet / $pull liked_by (idempotent - never double-counts)
 ```
 
 ---
 
-## 4. Browse caching & view counters — *Member E/F segments / Scenario D*
+## 4. Browse caching & view counters - *Member E/F segments / Scenario D*
 
 Cache-aside for listings; write-behind (atomic `GETDEL`) for view counts.
 
@@ -112,7 +112,7 @@ flowchart TD
 
     subgraph "GET /concerts/id"
         V[Request] --> E{Concert exists?}
-        E -- no --> N[404 — no counter key created]
+        E -- no --> N[404 - no counter key created]
         E -- yes --> I[Redis INCR concert:id:views<br>cheap, no MySQL write]
     end
 
@@ -123,7 +123,7 @@ flowchart TD
 
 ---
 
-## 5. Concert delete — cross-store cascade — *Member F segment / Scenario E*
+## 5. Concert delete - cross-store cascade - *Member F segment / Scenario E*
 
 MySQL cascades via FKs; the app completes the cascade across the logical-FK
 boundary into MongoDB and MinIO (no orphans).

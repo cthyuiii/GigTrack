@@ -1,5 +1,5 @@
 """
-GigTrack — Flask web application entry point.
+GigTrack - Flask web application entry point.
 
 Run:
     export FLASK_APP=app/app.py
@@ -124,7 +124,7 @@ def inject_cities():
 # Each concert detail view does a cheap Redis INCR on a *pending delta* key.
 # Before we render any list ordered by view_count, we drain those deltas into
 # MySQL so the durable counter (and therefore the trending order) is correct.
-# GETDEL is atomic, so a concurrent viewer's increment is never lost — it just
+# GETDEL is atomic, so a concurrent viewer's increment is never lost - it just
 # lands in the next flush. This is the "flush periodically" pattern described
 # in docs/schema_design.md, triggered opportunistically instead of via cron.
 
@@ -214,9 +214,9 @@ def signup():
             # Most likely a duplicate username/email (UNIQUE constraint).
             # Log the detail server-side; show the user a safe message.
             log.exception("Sign-up failed for email=%s", email)
-            flash("Sign-up failed — that username or email may already be in use.")
+            flash("Sign-up failed - that username or email may already be in use.")
             return render_template("signup.html")
-        flash("Account created — please log in.")
+        flash("Account created - please log in.")
         return redirect(url_for("login"))
     return render_template("signup.html")
 
@@ -292,7 +292,7 @@ def _decorate_concerts(rows):
 
 @app.route("/")
 def home():
-    """Landing page — full-width hero, featured grid, category tiles, rail."""
+    """Landing page - full-width hero, featured grid, category tiles, rail."""
     flush_view_counts()
 
     featured = _decorate_concerts(query_all(
@@ -500,7 +500,7 @@ def artist_detail(artist_id):
 def book_ticket(concert_id):
     # Only customers buy tickets; admins manage them via the dashboard.
     if g.user.get("is_admin"):
-        flash("Admin accounts can't buy tickets — use the dashboard to manage bookings.")
+        flash("Admin accounts can't buy tickets - use the dashboard to manage bookings.")
         return redirect(url_for("concert_detail", concert_id=concert_id))
     try:
         ticket_id = int(request.form["ticket_id"])
@@ -556,7 +556,7 @@ def book_ticket(concert_id):
         # insufficient. Log the real cause; tell the user something safe.
         log.exception("Booking failed for user=%s ticket=%s",
                       g.user["user_id"], ticket_id)
-        flash("Booking failed — there may not be enough seats left in that tier.")
+        flash("Booking failed - there may not be enough seats left in that tier.")
     return redirect(url_for("concert_detail", concert_id=concert_id))
 
 
@@ -585,7 +585,7 @@ def toggle_follow(artist_id):
 @app.route("/concerts/<int:concert_id>/review", methods=["POST"])
 @login_required
 def post_review(concert_id):
-    # The concert must exist — otherwise a forged form could create orphan
+    # The concert must exist - otherwise a forged form could create orphan
     # review documents for arbitrary concert IDs.
     if not query_one("SELECT 1 FROM concerts WHERE concert_id = %s", (concert_id,)):
         abort(404)
@@ -638,7 +638,7 @@ def post_review(concert_id):
     if photos:
         msg += f" with {len(photos)} photo(s)"
     if rejected:
-        msg += f" ({rejected} image(s) skipped — too large or unsupported)"
+        msg += f" ({rejected} image(s) skipped - too large or unsupported)"
     flash(msg + ".")
     return redirect(url_for("concert_detail", concert_id=concert_id))
 
@@ -675,7 +675,7 @@ def _process_image(file_storage):
 @login_required
 def like_review(review_id):
     """Toggle the current user's like. $addToSet/$pull are idempotent, so a
-    user can never be counted twice — fixes the duplicate-like bug."""
+    user can never be counted twice - fixes the duplicate-like bug."""
     try:
         oid = ObjectId(review_id)
     except (InvalidId, TypeError):
@@ -721,7 +721,7 @@ def delete_review(review_id):
 @app.route("/my/bookings")
 @login_required
 def my_bookings():
-    # Admins don't have personal bookings — send them to the management view.
+    # Admins don't have personal bookings - send them to the management view.
     if g.user.get("is_admin"):
         return redirect(url_for("admin_bookings"))
     rows = query_all(
@@ -761,14 +761,14 @@ def cancel_booking(booking_id):
         "UPDATE bookings SET status = 'cancelled' WHERE booking_id = %s",
         (booking_id,),
     )
-    flash("Booking cancelled — seats released.")
+    flash("Booking cancelled - seats released.")
     return redirect(url_for("my_bookings"))
 
 
 @app.route("/my/profile", methods=["GET", "POST"])
 @login_required
 def profile():
-    """Self-service profile update — demonstrates user UPDATE at the app level."""
+    """Self-service profile update - demonstrates user UPDATE at the app level."""
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         city     = request.form.get("home_city", "").strip() or None
@@ -783,7 +783,7 @@ def profile():
             flash("Profile updated.")
         except Exception:
             log.exception("Profile update failed for user=%s", g.user["user_id"])
-            flash("Update failed — that username may already be taken.")
+            flash("Update failed - that username may already be taken.")
         return redirect(url_for("profile"))
     return render_template("profile.html")
 
@@ -848,7 +848,7 @@ def _form_concert_datetime():
 
 
 def _resolve_artist(cur):
-    """Return a headliner artist_id — inserting a new artist first if the admin
+    """Return a headliner artist_id - inserting a new artist first if the admin
     ticked 'add new artist' and filled in a name."""
     if request.form.get("new_artist_toggle"):
         name = (request.form.get("new_artist_name") or "").strip()
@@ -863,7 +863,7 @@ def _resolve_artist(cur):
 
 
 def _resolve_venue(cur):
-    """Return a venue_id — inserting a new venue first if the admin ticked
+    """Return a venue_id - inserting a new venue first if the admin ticked
     'add new venue' and filled in name + city."""
     if request.form.get("new_venue_toggle"):
         name = (request.form.get("new_venue_name") or "").strip()
@@ -886,7 +886,7 @@ def admin_concert_new():
     venues, artists = _concert_form_options()
     if request.method == "POST":
         try:
-            # Concert, any new artist/venue, and ticket tiers — one transaction.
+            # Concert, any new artist/venue, and ticket tiers - one transaction.
             with get_mysql() as conn, conn.cursor() as cur:
                 artist_id = _resolve_artist(cur)
                 venue_id  = _resolve_venue(cur)
@@ -914,7 +914,7 @@ def admin_concert_new():
             return redirect(url_for("admin_concert_edit", concert_id=new_id))
         except Exception as e:
             log.exception("Concert create failed")
-            flash(_friendly_db_error(e, "Create failed — check the field values."))
+            flash(_friendly_db_error(e, "Create failed - check the field values."))
     return render_template("admin/concert_form.html",
                            concert=None, venues=venues, artists=artists, tickets=[])
 
@@ -978,7 +978,7 @@ def admin_concert_edit(concert_id):
             flash("Concert updated.")
         except Exception as e:
             log.exception("Concert update failed for %s", concert_id)
-            flash(_friendly_db_error(e, "Update failed — check the field values."))
+            flash(_friendly_db_error(e, "Update failed - check the field values."))
         return redirect(url_for("admin_concert_edit", concert_id=concert_id))
 
     concert = query_one("SELECT * FROM concerts WHERE concert_id=%s", (concert_id,))
@@ -1001,10 +1001,10 @@ def admin_concert_delete(concert_id):
         execute("DELETE FROM concerts WHERE concert_id=%s", (concert_id,))
     except Exception:
         log.exception("Concert delete failed for %s", concert_id)
-        flash("Delete failed — there may be bookings referencing it.")
+        flash("Delete failed - there may be bookings referencing it.")
         return redirect(url_for("admin_concerts"))
 
-    # SQL delete succeeded — cascade to the OTHER stores so we don't orphan
+    # SQL delete succeeded - cascade to the OTHER stores so we don't orphan
     # data (Mongo has no FK into MySQL; this is the app-level cascade across
     # the logical-FK boundary). Photo blobs first, then the documents.
     try:
@@ -1053,7 +1053,7 @@ def admin_ticket_delete(ticket_id):
         flash("Ticket tier removed.")
     except Exception:
         log.exception("Ticket delete failed for %s", ticket_id)
-        flash("Could not remove tier — it may have bookings.")
+        flash("Could not remove tier - it may have bookings.")
     return redirect(url_for("admin_concert_edit", concert_id=concert_id)
                     if concert_id else url_for("admin_concerts"))
 
@@ -1102,7 +1102,7 @@ def admin_user_edit(user_id):
             flash("User updated.")
         except Exception:
             log.exception("User update failed for %s", user_id)
-            flash("Update failed — username/email may clash.")
+            flash("Update failed - username/email may clash.")
         return redirect(url_for("admin_users"))
     return render_template("admin/user_form.html", user=user)
 
@@ -1117,7 +1117,7 @@ def admin_user_delete(user_id):
         execute("DELETE FROM users WHERE user_id=%s", (user_id,))
     except Exception:
         log.exception("User delete failed for %s", user_id)
-        flash("Delete failed — the user may have bookings on record.")
+        flash("Delete failed - the user may have bookings on record.")
         return redirect(url_for("admin_users"))
 
     # App-level cascade across the logical-FK boundary: remove the user's
@@ -1221,7 +1221,7 @@ def admin_booking_cancel(booking_id):
         flash("That booking is already cancelled/refunded.")
         return redirect(url_for("admin_bookings"))
     execute("UPDATE bookings SET status='cancelled' WHERE booking_id=%s", (booking_id,))
-    flash("Booking cancelled — seats released.")
+    flash("Booking cancelled - seats released.")
     return redirect(url_for("admin_bookings"))
 
 
@@ -1240,11 +1240,11 @@ INFO_PAGES = {
     "about": ("About GigTrack",
               "<p>GigTrack is the easiest way to discover live music, grab tickets, "
               "and relive the night with fan-sourced setlists and reviews. We bring "
-              "every show — from intimate club gigs to arena tours — into one place.</p>"
+              "every show - from intimate club gigs to arena tours - into one place.</p>"
               "<p>Founded by music fans, for music fans.</p>"),
     "careers": ("Careers",
                 "<p>We're a small team that loves shipping. We're not actively hiring "
-                "right now, but we always want to hear from great people — "
+                "right now, but we always want to hear from great people - "
                 "<a href='/contact'>say hello</a>.</p>"),
     "help": ("Help Centre",
              "<p>Need a hand? Most answers live here:</p>"
@@ -1278,7 +1278,7 @@ def info_page(page):
 
 
 # ============================================================
-# Healthcheck — useful for verifying the stack
+# Healthcheck - useful for verifying the stack
 # ============================================================
 @app.route("/healthz")
 def healthz():
@@ -1301,7 +1301,7 @@ def healthz():
 
 
 if __name__ == "__main__":
-    # Debug is OFF unless FLASK_DEBUG=1 — never ship debug=True (it exposes an
+    # Debug is OFF unless FLASK_DEBUG=1 - never ship debug=True (it exposes an
     # interactive console / stack traces to anyone who can reach the app).
     debug = os.environ.get("FLASK_DEBUG") == "1"
     app.run(host="0.0.0.0", port=5000, debug=debug)

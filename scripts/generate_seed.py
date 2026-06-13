@@ -9,7 +9,7 @@ the Mongo seed (mongo/seed.py) can rely on the same counts/IDs. Designed to
 respect the BEFORE INSERT booking trigger: tickets start full and seeded
 bookings only ever decrement within availability.
 
-Counts are also mirrored in mongo/seed.py — keep them in sync.
+Counts are also mirrored in mongo/seed.py - keep them in sync.
 """
 import os
 import random
@@ -184,7 +184,7 @@ def main():
     # ---- bookings (trigger decrements seats) ----
     # Respects the app's business rules: max 6 confirmed tickets per user per
     # concert (MAX_TICKETS_PER_CONCERT in app.py) and no bookings for the
-    # admin account (user_id 1) — admins can't buy tickets in the app.
+    # admin account (user_id 1) - admins can't buy tickets in the app.
     w("INSERT INTO bookings (user_id, ticket_id, quantity, total_price, status, booked_at) VALUES")
     rows = []
     seats_left = {tid: meta[2] for tid, meta in ticket_meta.items()}

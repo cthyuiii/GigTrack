@@ -1,41 +1,41 @@
 """
-GigTrack — performance benchmark.
+GigTrack - performance benchmark.
 
 Measures SIX dimensions of database performance, grouped, and writes
 machine-readable output. Every scenario reports avg / p50 / p95 / p99 latency,
 throughput (ops/sec) and client CPU time per call; the run also reports peak
 client memory.
 
-  [reads]    1. MySQL trending query (uncached)   — the real 3-table join
-             2. Redis cached payload              — GET + json.loads
-             3. MySQL indexed filter (status)     — uses idx_concerts_status_date
-             4. MySQL UN-indexed filter           — full scan, for contrast
-             5. MongoDB indexed find (concert_id) — uses the seeded index
-             6. MongoDB UN-indexed find (rating)  — collection scan
-             7. Payload scaling (LIMIT 5/20/50)   — latency vs result size
+  [reads]    1. MySQL trending query (uncached)   - the real 3-table join
+             2. Redis cached payload              - GET + json.loads
+             3. MySQL indexed filter (status)     - uses idx_concerts_status_date
+             4. MySQL UN-indexed filter           - full scan, for contrast
+             5. MongoDB indexed find (concert_id) - uses the seeded index
+             6. MongoDB UN-indexed find (rating)  - collection scan
+             7. Payload scaling (LIMIT 5/20/50)   - latency vs result size
 
-  [point]    Access-time ladder — the same "fetch one thing by key" op on all
+  [point]    Access-time ladder - the same "fetch one thing by key" op on all
              three stores: MySQL PK lookup, Mongo unique-index find_one,
              Redis GET. Shows why sessions/cache live in Redis.
 
-  [compute]  Server-side computation — work the DB engine does, not the client:
+  [compute]  Server-side computation - work the DB engine does, not the client:
              MySQL GROUP BY revenue join, MySQL window function (RANK per
              city), Mongo $group aggregation, Mongo $lookup join, Mongo $facet
              multi-analytics. Compare cpu/call (client) vs avg (wall): a large
              gap means the server did the heavy lifting.
 
-  [writes]   Write latency per store — Redis SET, Mongo insert_one, MySQL
+  [writes]   Write latency per store - Redis SET, Mongo insert_one, MySQL
              INSERT (scratch table), and MySQL INSERT into bookings where the
              BEFORE INSERT trigger also locks + decrements seat inventory.
              The bookings-vs-scratch delta ≈ the cost of the trigger.
              All writes are cleaned up afterwards (scratch table dropped,
              bench bookings deleted and seats restored).
 
-  [txn]      Transaction batching — 50 INSERTs committed once vs 50 INSERTs
+  [txn]      Transaction batching - 50 INSERTs committed once vs 50 INSERTs
              committed individually. Shows per-commit (fsync/roundtrip)
              overhead; latency reported is per 50-row BATCH, not per row.
 
-  [parallel] Concurrent throughput — the trending read hammered by N worker
+  [parallel] Concurrent throughput - the trending read hammered by N worker
              threads (default 8), cached vs uncached. ops/s here is aggregate
              across workers; compare with the single-threaded numbers.
 
@@ -185,7 +185,7 @@ def read_scenarios(it):
 
 
 def point_lookup_scenarios(it):
-    """Same logical op — fetch ONE record by its key — on each store."""
+    """Same logical op - fetch ONE record by its key - on each store."""
     redis_client.setex("bench:point", 300, "42")
     out = {}
     out["MySQL point (PRIMARY KEY)"] = measure(
@@ -251,12 +251,12 @@ def write_scenarios(it):
     wit = min(it, 200)                 # cap write volume
     out = {}
 
-    # Redis SET — in-memory write.
+    # Redis SET - in-memory write.
     out["Redis write (SET)"] = measure(
         lambda: redis_client.set("bench:w", "x" * 64), wit)
     redis_client.delete("bench:w")
 
-    # Mongo insert_one — journalled document write into a scratch collection.
+    # Mongo insert_one - journalled document write into a scratch collection.
     bench_coll = mongo["bench_writes"]
     out["Mongo write (insert_one)"] = measure(
         lambda: bench_coll.insert_one({"payload": "x" * 64}), wit)
@@ -277,7 +277,7 @@ def write_scenarios(it):
         out["MySQL write (plain INSERT)"] = measure(mysql_plain_insert, wit)
 
         # INSERT into bookings: the BEFORE INSERT trigger locks the ticket
-        # row, checks availability, and decrements inventory — the delta vs
+        # row, checks availability, and decrements inventory - the delta vs
         # the plain INSERT above approximates the trigger's cost.
         cur.execute("SELECT ticket_id, available_seats FROM tickets "
                     "ORDER BY available_seats DESC LIMIT 1")
@@ -339,7 +339,7 @@ def txn_scenarios(it):
 
 
 def parallel_scenarios(it, workers):
-    """Aggregate throughput under concurrency — ops/s across all workers."""
+    """Aggregate throughput under concurrency - ops/s across all workers."""
     out = {}
     out[f"Redis cached x{workers} workers"] = measure_concurrent(
         lambda: json.loads(redis_client.get(BENCH_KEY)), it, workers)
@@ -378,7 +378,7 @@ def main():
     cpu_pct, rss_mb = _resource_usage()
 
     # ---- print ----
-    print(f"\nGigTrack benchmark — {it} iterations each "
+    print(f"\nGigTrack benchmark - {it} iterations each "
           f"({args.workers} workers for [parallel])\n")
     hdr = (f"{'scenario':34s} {'avg':>9s} {'p50':>9s} {'p95':>9s} "
            f"{'p99':>9s} {'cpu/call':>9s} {'ops/s':>10s}")
@@ -427,9 +427,9 @@ def main():
                 cols.append(colors[gname])
         fig, ax = plt.subplots(figsize=(10, max(5, 0.32 * len(names))))
         ax.barh(names, avgs, color=cols)
-        ax.set_xlabel("Average latency (ms, log scale) — txn rows are per 50-row batch")
+        ax.set_xlabel("Average latency (ms, log scale) - txn rows are per 50-row batch")
         ax.set_xscale("log")
-        ax.set_title("GigTrack — latency by store / strategy")
+        ax.set_title("GigTrack - latency by store / strategy")
         ax.invert_yaxis()
         from matplotlib.patches import Patch
         ax.legend(handles=[Patch(color=c, label=g) for g, c in colors.items()

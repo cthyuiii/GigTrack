@@ -1,5 +1,5 @@
 """
-GigTrack — MongoDB seed script.
+GigTrack - MongoDB seed script.
 
 Usage:
     python mongo/seed.py            # idempotent: seeds only if collections are empty
@@ -8,7 +8,7 @@ Usage:
 Reads MONGO_URI from environment (defaults to mongodb://localhost:27017).
 Seeds the `gigtrack` collections: setlists, reviews, artist_bios.
 
-By default this is SAFE TO RUN ON EVERY APP BOOT — it will not destroy data
+By default this is SAFE TO RUN ON EVERY APP BOOT - it will not destroy data
 a user created during the session. It only drops + reseeds when --force /
 SEED_FORCE=1 is given.
 """
@@ -39,7 +39,7 @@ COLLECTIONS = ("setlists", "reviews", "artist_bios")
 # ---- idempotency guard --------------------------------------------------
 already_seeded = any(db[c].estimated_document_count() > 0 for c in COLLECTIONS)
 if already_seeded and not FORCE:
-    print("gigtrack Mongo collections already populated — skipping seed "
+    print("gigtrack Mongo collections already populated - skipping seed "
           "(use --force or SEED_FORCE=1 to wipe and reseed).")
     for coll in COLLECTIONS:
         print(f"  {coll}: {db[coll].count_documents({})} docs")
@@ -85,7 +85,7 @@ TITLES = ["Unreal energy", "Sound was crisp", "Worth every cent", "A bit flat",
           "Crowd went off", "Encore took the roof off", "Mixed feelings",
           "Best gig this year", "Logistics were rough", "Pure magic"]
 BODIES = ["The mix was clean and the lighting design was stunning.",
-          "Great setlist but the bar queues were brutal — bring water.",
+          "Great setlist but the bar queues were brutal - bring water.",
           "Support act stole the show honestly.",
           "Sound bled a bit at the back but the energy made up for it.",
           "Tight performance, no filler, straight bangers.",

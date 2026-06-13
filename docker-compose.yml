@@ -6,9 +6,9 @@ services:
       MYSQL_DATABASE: gigtrack
       MYSQL_USER: gigtrack
       MYSQL_PASSWORD: gigtrack_pw
-    # Host-side port remapped to 3307 to avoid clashing with a locally-running
-    # MySQL/MariaDB on 3306. Inside the compose network the app still uses 3306.
-    ports: ["3307:3306"]
+    # Host port matches the native default (3306). Stop any local MySQL/MariaDB
+    # on 3306 before `docker compose up`. Inside the network the app uses 3306.
+    ports: ["3306:3306"]
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
@@ -24,15 +24,15 @@ services:
 
   mongo:
     image: mongo:7
-    # Remapped to 27018 in case a local Mongo is running on 27017.
-    ports: ["27018:27017"]
+    # Host port matches the native default (27017). Stop any local MongoDB first.
+    ports: ["27017:27017"]
     volumes:
       - mongo_data:/data/db
 
   redis:
     image: redis:7-alpine
-    # Remapped to 6380 in case a local Redis is running on 6379.
-    ports: ["6380:6379"]
+    # Host port matches the native default (6379). Stop any local Redis first.
+    ports: ["6379:6379"]
 
   minio:
     image: minio/minio
@@ -71,9 +71,10 @@ services:
       S3_ACCESS_KEY:  minioadmin
       S3_SECRET_KEY:  minioadmin
       S3_BUCKET:      gigtrack-media
-    # Host-side port remapped to 5001 because macOS AirPlay Receiver
-    # binds 5000 by default. Inside the container Flask still listens on 5000.
-    ports: ["5001:5000"]
+    # Host port matches the native default (5000). On macOS, if AirPlay Receiver
+    # owns 5000, turn it off (System Settings > General > AirDrop & Handoff) or
+    # change the left number here (e.g. "5050:5000"). Flask listens on 5000 inside.
+    ports: ["5000:5000"]
     command: >
       sh -c "python mongo/seed.py;
              python app/storage.py || true;

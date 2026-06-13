@@ -3,14 +3,14 @@
 A live-music & concert companion (INF2003 Database Systems group project). It
 uses four datastores, each for what it's best at:
 
-- **MySQL** — transactional, relational data (users, artists, venues, concerts,
+- **MySQL** - transactional, relational data (users, artists, venues, concerts,
   tickets, bookings, follows): foreign keys, CHECK constraints, and triggers
   that keep seat inventory and VIP pricing correct.
-- **MongoDB** — variable-shape documents (setlists, reviews with tags/photos,
+- **MongoDB** - variable-shape documents (setlists, reviews with tags/photos,
   artist bios) that would be painful to normalise.
-- **Redis** — cached concert listings, distinct city/genre lists, live view
+- **Redis** - cached concert listings, distinct city/genre lists, live view
   counters, and session tokens.
-- **MinIO** — S3-compatible object storage for image **blobs** (artist photos,
+- **MinIO** - S3-compatible object storage for image **blobs** (artist photos,
   review photos). The database stores only the URL pointer; bytes live in a
   bucket. Swap the endpoint for AWS S3 / Cloudflare R2 with no code change.
 
@@ -19,10 +19,10 @@ uses four datastores, each for what it's best at:
 - Ticketmaster-style landing page: full-width hero, featured grid, category
   tiles (from DB genres), and a "more shows" rail.
 - Browse + filter concerts by **city, genre, and time window** (upcoming /
-  past / all) — listings are shown **sequentially by date** and Redis-cached.
+  past / all) - listings are shown **sequentially by date** and Redis-cached.
 - Concert detail with lineup, tiered tickets, MongoDB setlist & reviews.
 - Customer flow: sign up, log in, book tickets (**max 6 per concert**, enforced
-  in a single locking DB transaction — race-safe), review with photos,
+  in a single locking DB transaction - race-safe), review with photos,
   like/unlike, follow artists.
 - **Admin dashboard**: create/edit/delete concerts and ticket tiers (add new
   artists/venues on the fly), manage bookings (resize/cancel), manage users
@@ -31,15 +31,16 @@ uses four datastores, each for what it's best at:
 
 ## Ports (host → container)
 
-`docker-compose` deliberately remaps the host ports so they don't clash with
-anything already running locally. **The app is on `5001`, not 5000.**
+Host ports match the native defaults, so the same `.env` works whether you run
+the datastores natively or in Docker. Because nothing is remapped, stop any local
+service already using these ports before `docker compose up`.
 
 | Service | In browser / from host | Inside the compose network |
 |---|---|---|
-| **App (Flask)** | <http://localhost:5001> | `app:5000` |
-| MySQL | `localhost:3307` | `mysql:3306` |
-| MongoDB | `localhost:27018` | `mongo:27017` |
-| Redis | `localhost:6380` | `redis:6379` |
+| **App (Flask)** | <http://localhost:5000> | `app:5000` |
+| MySQL | `localhost:3306` | `mysql:3306` |
+| MongoDB | `localhost:27017` | `mongo:27017` |
+| Redis | `localhost:6379` | `redis:6379` |
 | MinIO API | `localhost:9000` | `minio:9000` |
 | MinIO Console | <http://localhost:9001> (`minioadmin`/`minioadmin`) | `minio:9001` |
 
@@ -47,23 +48,23 @@ anything already running locally. **The app is on `5001`, not 5000.**
 
 Three ways to run, pick one:
 
-1. **Native install (no Docker)** — install the four datastores yourself +
+1. **Native install (no Docker)** - install the four datastores yourself +
    **Python 3.11+**. First section below.
-2. **All in Docker** — Docker is the only requirement.
-3. **Hybrid** — datastores in Docker, Flask local (Python 3.11+ as well).
+2. **All in Docker** - Docker is the only requirement.
+3. **Hybrid** - datastores in Docker, Flask local (Python 3.11+ as well).
 
 **Install Docker Desktop** (only for options 2–3; includes Docker Compose):
 
-- macOS: <https://docs.docker.com/desktop/install/mac-install/> — or `brew install --cask docker`
+- macOS: <https://docs.docker.com/desktop/install/mac-install/> - or `brew install --cask docker`
 - Windows (WSL2): <https://docs.docker.com/desktop/install/windows-install/>
-- Linux: Docker Engine + Compose plugin — <https://docs.docker.com/engine/install/>
+- Linux: Docker Engine + Compose plugin - <https://docs.docker.com/engine/install/>
 
 Verify: `docker --version` and `docker compose version`.
 
 **Python (options 1 and 3):** 3.11+ from <https://www.python.org/downloads/>
 (macOS: `brew install python`). Verify: `python3 --version`.
 
-## Quick start — native install (no Docker)
+## Quick start - native install (no Docker)
 
 Install the four datastores natively, then run Flask against them. Commands are
 shown for **macOS (Homebrew)** and **Ubuntu/Debian (apt)**; Windows users can
@@ -78,7 +79,7 @@ brew install mysql && brew services start mysql
 # Ubuntu/Debian
 sudo apt update && sudo apt install -y mysql-server && sudo systemctl enable --now mysql
 ```
-Windows: MySQL Installer — <https://dev.mysql.com/downloads/installer/>
+Windows: MySQL Installer - <https://dev.mysql.com/downloads/installer/>
 
 Create the database + app user, then load the schema and seed:
 
@@ -104,11 +105,11 @@ mysql -ugigtrack -pgigtrack_pw gigtrack < sql/seed.sql
 brew tap mongodb/brew && brew install mongodb-community@7.0
 brew services start mongodb-community@7.0
 
-# Ubuntu/Debian — follow the official repo steps, then:
+# Ubuntu/Debian - follow the official repo steps, then:
 sudo systemctl enable --now mongod
 ```
 Install guide / Windows: <https://www.mongodb.com/docs/manual/installation/>
-(No manual seeding here — `mongo/seed.py` in step 5 populates it.)
+(No manual seeding here - `mongo/seed.py` in step 5 populates it.)
 
 ### 3. Redis 7
 
@@ -133,7 +134,7 @@ wget https://dl.min.io/server/minio/release/linux-amd64/minio -O minio && chmod 
 MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin ./minio server ~/minio-data --console-address ":9001"
 ```
 This serves the S3 API on `:9000` and the console on `:9001`. Leave it running.
-(Optional: skip MinIO and set `S3_ENDPOINT=` empty in `.env` — reviews still
+(Optional: skip MinIO and set `S3_ENDPOINT=` empty in `.env` - reviews still
 post, just without photos, and artist cards show the gradient placeholder.)
 
 ### 5. Point the app at the native services and run
@@ -175,17 +176,17 @@ flask --app app/app.py run              # → http://localhost:5000
 ```
 
 `.env` is loaded automatically by every entry point (python-dotenv) and is
-gitignored — never commit real secrets.
+gitignored - never commit real secrets.
 
-## Alternative — all in Docker
+## Alternative - all in Docker
 
-The only prerequisite is Docker. No `.env` needed — `docker-compose.yml`
+The only prerequisite is Docker. No `.env` needed - `docker-compose.yml`
 injects every variable into the app container.
 
 ```bash
 docker compose up --build
 # First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
-open http://localhost:5001          # Linux: xdg-open, Windows: start
+open http://localhost:5000          # Linux: xdg-open, Windows: start
 ```
 
 Sample logins (password is `password` for everyone):
@@ -194,7 +195,7 @@ Sample logins (password is `password` for everyone):
 - Regular users: `user02@example.com` … `user21@example.com`
 
 > **Artist photos.** On boot `scripts/fetch_artist_images.py` downloads a real
-> placeholder portrait per artist (from Pravatar — free, no API key, no rate
+> placeholder portrait per artist (from Pravatar - free, no API key, no rate
 > limit) and uploads it to MinIO. If a photo can't be fetched the card keeps a
 > gradient placeholder. Re-run without a reboot:
 > `docker compose exec app python scripts/fetch_artist_images.py --force`
@@ -207,17 +208,17 @@ Sample logins (password is `password` for everyone):
 > docker compose down -v && docker compose up --build
 > ```
 
-## Quick start — local Flask, datastores in Docker
+## Quick start - local Flask, datastores in Docker
 
 Run the datastores in Docker (they auto-seed) but run Flask on your machine for
-faster iteration. `.env.example` is already set to the remapped host ports, so
-just copy it — no edits needed.
+faster iteration. `.env.example` already uses the default host ports, so just
+copy it - no edits needed.
 
 ```bash
 # 1. Start ONLY the datastores (MySQL auto-loads schema.sql + seed.sql).
 docker compose up -d mysql mongo redis minio
 
-# 2. Copy the env file (no editing required — it matches the ports above).
+# 2. Copy the env file (no editing required - it matches the ports above).
 cp .env.example .env
 
 # 3. (Recommended) create a virtualenv, then install deps.
@@ -234,6 +235,116 @@ python scripts/fetch_artist_images.py  # real portraits → MinIO
 # 5. Run the app (local Flask defaults to port 5000).
 flask --app app/app.py run             # → http://localhost:5000
 ```
+
+## Troubleshooting (local setup)
+
+Common issues when running natively (mostly macOS) and how to fix them:
+
+- **`brew install mysql` fails or won't link because MariaDB is installed.** Both ship a `mysql` binary, so Homebrew refuses to link. Free port 3306 and the link, then install:
+  ```bash
+  brew services stop mariadb && brew unlink mariadb
+  brew install mysql && brew link --overwrite mysql && brew services start mysql
+  ```
+  To switch back later: `brew services stop mysql && brew unlink mysql && brew link mariadb && brew services start mariadb`. (Or skip MySQL entirely and use your existing MariaDB 10.6+, which runs this schema; just point `.env` at port 3306.)
+
+- **`ERROR 1419 (HY000): You do not have the SUPER privilege and binary logging is enabled`** while loading `schema.sql`. MySQL 8 enables binary logging by default, so a non-root user cannot create triggers until creators are trusted. Set it once as root (who has the privilege), then re-run (the schema self-drops, so re-running is clean):
+  ```bash
+  mysql -uroot -e "SET PERSIST log_bin_trust_function_creators = 1;"
+  mysql -ugigtrack -pgigtrack_pw gigtrack < sql/schema.sql
+  mysql -ugigtrack -pgigtrack_pw gigtrack < sql/seed.sql
+  ```
+  Alternatively, load the schema as root: `mysql -uroot gigtrack < sql/schema.sql` (root has SUPER).
+
+- **`Refusing to load formula mongodb/brew/... from untrusted tap`.** Homebrew now requires trusting third-party taps. `mongodb/brew` is MongoDB's official tap:
+  ```bash
+  brew trust mongodb/brew
+  brew install mongodb-community@7.0 && brew services start mongodb-community@7.0
+  ```
+
+- **Port 5000 already in use / app won't bind (macOS AirPlay Receiver owns 5000).** Run on another port, or turn AirPlay Receiver off in System Settings > General > AirDrop & Handoff:
+  ```bash
+  flask --app app/app.py run --port 5001   # then open http://localhost:5001
+  ```
+
+- **`Can't connect to MySQL / MongoDB / Redis (Connection refused)`.** Both native and Docker now use the same host ports (3306 / 27017 / 6379), so the same `.env` works either way; just don't run a local datastore and its Docker container on the same port at once. Confirm the service is up (`brew services list` or `docker compose ps`).
+
+- **`Access denied for user 'gigtrack'`.** The DB user was not created or the password is wrong. Re-run the `CREATE USER ... GRANT ... FLUSH PRIVILEGES` block from step 1.
+
+- **PyMySQL `Authentication plugin 'caching_sha2_password'` error (MySQL 8).** Make sure deps are installed (`pip install -r requirements.txt`, which includes `cryptography`). If it persists: `ALTER USER 'gigtrack'@'localhost' IDENTIFIED WITH mysql_native_password BY 'gigtrack_pw';`
+
+- **`ModuleNotFoundError: No module named 'db'` (or `app`).** Set the import path before running Flask, the scripts, or pytest: `export PYTHONPATH=$PWD/app`.
+
+- **No setlists, reviews or bios appear.** MongoDB was not seeded (only MySQL auto-seeds). With the venv active and `PYTHONPATH=$PWD/app`, run `python mongo/seed.py`.
+
+- **Artist images or review photos do not load.** MinIO is not running, or the bucket/photos were not created. Start `minio server ...`, then `python app/storage.py` (creates the bucket) and `python scripts/fetch_artist_images.py`. To run without object storage, set `S3_ENDPOINT=` (blank) in `.env`; reviews still work, just without photos.
+
+- **Schema or seed changes do not appear (Docker).** MySQL only runs the init SQL on a fresh data volume: `docker compose down -v && docker compose up --build`.
+
+- **`flask: command not found`.** Activate the venv (`source .venv/bin/activate`) or call `python -m flask --app app/app.py run`.
+
+## Accessing the databases and consoles
+
+Once the app is running, open a console for each store to view data and watch it
+change live. Native commands are shown first; the Docker equivalent is in the
+comment beside it.
+
+### MySQL (relational core)
+```bash
+mysql -ugigtrack -pgigtrack_pw gigtrack
+# Docker: docker compose exec mysql mysql -ugigtrack -pgigtrack_pw gigtrack
+```
+```sql
+SHOW TABLES;
+SELECT * FROM concerts LIMIT 5;
+SELECT ticket_id, tier, available_seats FROM tickets WHERE concert_id = 6;
+SELECT * FROM bookings ORDER BY booking_id DESC LIMIT 5;
+SHOW TRIGGERS;                              -- the 4 business-rule triggers
+SELECT * FROM v_concert_summary LIMIT 5;    -- the reusable view
+```
+
+### MongoDB (documents)
+```bash
+mongosh gigtrack
+# Docker: docker compose exec mongo mongosh gigtrack
+```
+```javascript
+show collections                       // reviews, setlists, artist_bios
+db.reviews.find().limit(3)
+db.reviews.find({ concert_id: 6 }).pretty()
+db.setlists.findOne()
+db.artist_bios.findOne()
+db.reviews.countDocuments()
+```
+
+### Redis (cache, sessions, view counters)
+```bash
+redis-cli
+# Docker: docker compose exec redis redis-cli
+```
+```bash
+KEYS *                       # everything currently cached
+KEYS session:*               # active login sessions
+TTL session:<paste-token>    # about 1800s, refreshes on each request
+GET concert:6:views          # pending view counter for concert 6
+KEYS browse:*                # cached listing pages
+MONITOR                      # live stream of every command (Ctrl-C to stop)
+```
+
+### MinIO (object storage)
+- Web console: http://localhost:9001 (login `minioadmin` / `minioadmin`), then open the `gigtrack-media` bucket to browse the uploaded images.
+- Or list objects from the terminal with the MinIO client:
+  ```bash
+  brew install minio-mc            # the 'mc' client (skip if already installed)
+  mc alias set local http://localhost:9000 minioadmin minioadmin
+  mc ls -r local/gigtrack-media
+  ```
+  Docker, no install needed:
+  ```bash
+  docker run --rm --network gigtrack_default minio/mc sh -c \
+    "mc alias set local http://minio:9000 minioadmin minioadmin && mc ls -r local/gigtrack-media"
+  ```
+
+> `docs/demo_cli.md` has step-by-step before/after scenarios (sign up, book, review, cache hit) that show each store changing live as you use the app.
 
 ## Project layout
 
@@ -280,9 +391,9 @@ A full 10-minute video script for 6 presenters is in
 [`docs/presentation_demo.md`](docs/presentation_demo.md); live CLI scenarios for
 all four datastores are in [`docs/demo_cli.md`](docs/demo_cli.md).
 
-1. Landing page (`/`) — hero + category tiles + featured rail (artist photos from MinIO).
-2. Browse `/concerts?genre=Pop&city=Singapore` — filtered listing; second load served from Redis cache.
-3. Concert detail — lineup + tiers from MySQL; setlist & reviews from MongoDB; Redis view counter ticks.
+1. Landing page (`/`) - hero + category tiles + featured rail (artist photos from MinIO).
+2. Browse `/concerts?genre=Pop&city=Singapore` - filtered listing; second load served from Redis cache.
+3. Concert detail - lineup + tiers from MySQL; setlist & reviews from MongoDB; Redis view counter ticks.
 4. Log in as a customer → book tickets with the **+/- stepper**; try to exceed **6 per concert** → blocked with an error.
 5. Oversell attempt → `BEFORE INSERT` trigger rolls back; cancel a booking → `AFTER UPDATE` trigger restores seats.
 6. Post a review with a photo → text/metadata in Mongo, image blob in MinIO (show the MinIO console).
@@ -294,48 +405,48 @@ all four datastores are in [`docs/demo_cli.md`](docs/demo_cli.md).
 
 Correctness is covered by `pytest` (see the next section); **database performance**
 (compute, access time, write cost, concurrency) is covered by
-`scripts/benchmark.py`. It measures **six groups** of scenarios — every one
+`scripts/benchmark.py`. It measures **six groups** of scenarios - every one
 reports avg/p50/p95/p99 latency, throughput (ops/s) and client **CPU time per
 call**, plus **peak memory** for the run:
 
 | Group | What it measures | Scenarios |
 |---|---|---|
 | `[reads]` | Caching & indexing on the read path | uncached 3-table join vs Redis cache; indexed vs full-scan (MySQL **and** Mongo); payload scaling (LIMIT 5/20/50) |
-| `[point]` | **Access time** — fetch one record by key on each store | MySQL PRIMARY KEY lookup vs Mongo unique-index `find_one` vs Redis `GET` |
+| `[point]` | **Access time** - fetch one record by key on each store | MySQL PRIMARY KEY lookup vs Mongo unique-index `find_one` vs Redis `GET` |
 | `[compute]` | **Server-side computation** (engine does the work, not the client) | MySQL `GROUP BY` revenue join, window function (`RANK` per city); Mongo `$group`, `$lookup` join, `$facet` dashboard |
-| `[writes]` | **Write latency** per store + trigger cost | Redis `SET`, Mongo `insert_one`, MySQL plain `INSERT`, MySQL `INSERT` into `bookings` (fires the seat trigger — the delta vs plain INSERT ≈ trigger overhead) |
+| `[writes]` | **Write latency** per store + trigger cost | Redis `SET`, Mongo `insert_one`, MySQL plain `INSERT`, MySQL `INSERT` into `bookings` (fires the seat trigger - the delta vs plain INSERT ≈ trigger overhead) |
 | `[txn]` | Commit/fsync overhead | 50 INSERTs in **1 commit** vs 50 INSERTs in **50 commits** (latency per 50-row batch) |
-| `[parallel]` | Throughput under concurrency | trending read hammered by N threads (default 8), cached vs uncached — aggregate ops/s |
+| `[parallel]` | Throughput under concurrency | trending read hammered by N threads (default 8), cached vs uncached - aggregate ops/s |
 
 ### Why these benchmark cases are required
 
 Every architectural decision in GigTrack is a performance claim, and each
 group exists to back one of those claims with a number instead of an assertion:
 
-- **`[reads]`** — we claim Redis caching and our indexes (incl. the composite
+- **`[reads]`** - we claim Redis caching and our indexes (incl. the composite
   `(status, concert_date)`) are worth their complexity. Cached-vs-uncached and
   indexed-vs-full-scan are the only honest way to show *by how much*; payload
   scaling shows whether latency is per-row or per-roundtrip.
-- **`[point]`** — we put sessions and counters in Redis rather than MySQL.
+- **`[point]`** - we put sessions and counters in Redis rather than MySQL.
   That's only justified if a Redis GET measurably beats a PK lookup; this
   ladder quantifies the gap that motivates the whole polyglot design.
-- **`[compute]`** — we push aggregation into the engines (`GROUP BY`, window
+- **`[compute]`** - we push aggregation into the engines (`GROUP BY`, window
   functions, `$facet`, `$lookup`) instead of computing in Python. The
   `cpu/call ≪ avg` gap is the evidence the server, not the client, did the
-  work — i.e. the queries scale with the DB, not the app process.
-- **`[writes]`** — triggers aren't free: every booking INSERT also locks and
+  work - i.e. the queries scale with the DB, not the app process.
+- **`[writes]`** - triggers aren't free: every booking INSERT also locks and
   updates a ticket row. Measuring INSERT-with-trigger against a plain INSERT
   prices that integrity guarantee, so "we chose triggers" is an informed
   trade-off rather than a guess.
-- **`[txn]`** — the seed loader and any future bulk import depend on batching.
+- **`[txn]`** - the seed loader and any future bulk import depend on batching.
   One commit vs fifty shows the per-commit (fsync/roundtrip) cost and justifies
   why `generate_seed.py` emits multi-row INSERTs.
-- **`[parallel]`** — single-threaded latency hides contention. A real app
+- **`[parallel]`** - single-threaded latency hides contention. A real app
   serves concurrent users; this group shows whether throughput scales with
   workers and how much further the cache pulls ahead under load.
 
-(They also directly serve the brief's optional Task 7 — "database performance
-analysis, e.g., speed and memory usage" — which is why CPU-per-call and peak
+(They also directly serve the brief's optional Task 7 - "database performance
+analysis, e.g., speed and memory usage" - which is why CPU-per-call and peak
 memory are reported alongside latency.)
 
 Write scenarios are **self-cleaning**: the scratch table is dropped, bench
@@ -395,26 +506,26 @@ Each test exists because something specific breaks silently without it:
 
 | Test case(s) | Why it's required |
 |---|---|
-| Seat trigger: book / oversell / cancel / refund | The triggers are the **core integrity guarantee** of the whole app — money and inventory. A wrong trigger doesn't throw errors; it quietly corrupts `available_seats` (overselling a venue, or leaking seats on every refund — a real bug this suite caught). Only a before/after seat-count assertion proves rollback and restore actually happen. |
-| VIP-pricing trigger | Business rules enforced *in the database* (not the app) can only be verified by attempting a violating INSERT and asserting the DB rejects it — app-level checks could pass while the trigger is broken or missing after a reseed. |
-| 6-ticket quota via the live route | The quota spans **multiple rows and tiers** (a `SUM` across bookings), so no single constraint can enforce it — and it was previously race-prone. Driving the real route proves the locking transaction, not just the SQL, is correct. |
-| Cross-store cascade on concert delete | MongoDB has **no foreign keys into MySQL** — nothing in any engine stops orphaned setlists/reviews/photo-blobs. The only safety net for the logical-FK boundary is a test that deletes and counts what's left. |
+| Seat trigger: book / oversell / cancel / refund | The triggers are the **core integrity guarantee** of the whole app - money and inventory. A wrong trigger doesn't throw errors; it quietly corrupts `available_seats` (overselling a venue, or leaking seats on every refund - a real bug this suite caught). Only a before/after seat-count assertion proves rollback and restore actually happen. |
+| VIP-pricing trigger | Business rules enforced *in the database* (not the app) can only be verified by attempting a violating INSERT and asserting the DB rejects it - app-level checks could pass while the trigger is broken or missing after a reseed. |
+| 6-ticket quota via the live route | The quota spans **multiple rows and tiers** (a `SUM` across bookings), so no single constraint can enforce it - and it was previously race-prone. Driving the real route proves the locking transaction, not just the SQL, is correct. |
+| Cross-store cascade on concert delete | MongoDB has **no foreign keys into MySQL** - nothing in any engine stops orphaned setlists/reviews/photo-blobs. The only safety net for the logical-FK boundary is a test that deletes and counts what's left. |
 | Headliner-lineup sync | `concerts.headline_artist_id` and the slot-1 `concert_artists` row store the **same fact twice** (denormalisation). Anything stored twice can disagree; the test pins the sync code that keeps them consistent. |
-| Mongo like-idempotency | "Helpful count" is derived from a set — if `$addToSet`/`$pull` were ever swapped for `$inc`, double-counting returns. The test encodes the invariant: liking twice = liking once. |
+| Mongo like-idempotency | "Helpful count" is derived from a set - if `$addToSet`/`$pull` were ever swapped for `$inc`, double-counting returns. The test encodes the invariant: liking twice = liking once. |
 | CSRF rejection | Security controls fail **open**: if the guard is accidentally removed, every form still works and nothing visibly breaks. A test that asserts a token-less POST gets 400 is the only thing that notices. |
-| Redis caching + sliding session TTL | Cache bugs are invisible (the page still renders — just slowly, or stale), and a non-sliding session logs users out mid-demo. Asserting the cache key is written and the TTL refreshes makes both observable. |
+| Redis caching + sliding session TTL | Cache bugs are invisible (the page still renders - just slowly, or stale), and a non-sliding session logs users out mid-demo. Asserting the cache key is written and the TTL refreshes makes both observable. |
 | Open-redirect guard, image validation (unit) | Input-handling edge cases (`//evil.com`, `/\evil.com`, fake/oversized images) are exactly what attackers and markers try first; pure-logic tests cover them in milliseconds with no Docker. |
 | Business constants (unit) | Docs, templates and seed generator all assume max-6 tickets / 30-min sessions / upload caps. The test fails loudly if a constant changes so the dependents get updated together. |
 
 Two further reasons the suite earns its place: it's the **regression net** for
 the brief's evolving deliverables (every bug fixed during development got a
 test so it can't return), and it's **proof of executability** for the
-source-code submission — a marker can run `pytest` and watch the database
+source-code submission - a marker can run `pytest` and watch the database
 guarantees demonstrate themselves.
 
 Integration tests **skip themselves automatically** if the datastores aren't
 reachable, so a plain `pytest` is always safe. Every test cleans up after
-itself — running against the seeded dev database is fine.
+itself - running against the seeded dev database is fine.
 
 ```bash
 # One-time setup (same venv as the app):
@@ -422,10 +533,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 
-# Unit tests only — no Docker needed:
+# Unit tests only - no Docker needed:
 pytest tests/test_unit.py
 
-# Full suite — start the datastores first:
+# Full suite - start the datastores first:
 docker compose up -d mysql mongo redis minio
 pytest
 
@@ -446,14 +557,14 @@ docker compose exec app pytest
 
 | Brief item | Where |
 |---|---|
-| Task 1 — application | This README + `docs/presentation_demo.md` |
-| Task 2 — dataset | Synthetic seed (`scripts/generate_seed.py`); optional Kaggle import |
-| Task 3 — ER + NoSQL schema | `docs/er_diagram.mermaid`, `docs/schema_design.md` |
-| Task 4 — CRUD (SQL + NoSQL, wired into the app) | signup/booking/profile/admin + `sql/queries.sql`; review create/read/like/delete + `mongo/queries.py` |
-| Task 5 — complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (nested, window, CTE, transaction, triggers); Mongo `$facet` + `$lookup` |
-| Task 6 — GenAI reflection | Final report (see `docs/report_structure.md`) |
-| Task 7 — performance | `scripts/benchmark.py` (6 groups: reads, point lookup, compute, writes incl. trigger cost, txn batching, concurrency) → CSV + chart |
-| Task 8 — web UI + admin | `app/` + `/admin` |
+| Task 1 - application | This README + `docs/presentation_demo.md` |
+| Task 2 - dataset | Synthetic seed (`scripts/generate_seed.py`); optional Kaggle import |
+| Task 3 - ER + NoSQL schema | `docs/er_diagram.mermaid`, `docs/schema_design.md` |
+| Task 4 - CRUD (SQL + NoSQL, wired into the app) | signup/booking/profile/admin + `sql/queries.sql`; review create/read/like/delete + `mongo/queries.py` |
+| Task 5 - complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (nested, window, CTE, transaction, triggers); Mongo `$facet` + `$lookup` |
+| Task 6 - GenAI reflection | Final report (see `docs/report_structure.md`) |
+| Task 7 - performance | `scripts/benchmark.py` (6 groups: reads, point lookup, compute, writes incl. trigger cost, txn batching, concurrency) → CSV + chart |
+| Task 8 - web UI + admin | `app/` + `/admin` |
 | Data organisation & security | `docs/schema_design.md`; Security notes above |
 | Object storage | `app/storage.py` + MinIO |
-| Correctness verification | `tests/` (pytest) — unit + integration; see "Running the logic tests" |
+| Correctness verification | `tests/` (pytest) - unit + integration; see "Running the logic tests" |

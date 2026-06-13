@@ -1,5 +1,5 @@
 """
-Integration tests — exercise the REAL business logic against live datastores.
+Integration tests - exercise the REAL business logic against live datastores.
 
 Requires the stack (or at least MySQL+Mongo+Redis) to be up and seeded:
     docker compose up -d mysql mongo redis minio
@@ -15,7 +15,7 @@ import pytest
 from conftest import stack_available
 
 pytestmark = pytest.mark.skipif(
-    not stack_available(), reason="datastores not reachable — start the stack first"
+    not stack_available(), reason="datastores not reachable - start the stack first"
 )
 
 CSRF = {"csrf_token": "test-csrf"}
@@ -34,7 +34,7 @@ def _cleanup_booking(booking_id):
                    "WHERE booking_id=%s", (booking_id,))
     if not bk:
         return
-    if bk["status"] == "confirmed":      # seats still held — give them back
+    if bk["status"] == "confirmed":      # seats still held - give them back
         execute("UPDATE tickets SET available_seats = available_seats + %s "
                 "WHERE ticket_id=%s", (bk["quantity"], bk["ticket_id"]))
     execute("DELETE FROM bookings WHERE booking_id=%s", (booking_id,))
