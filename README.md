@@ -294,6 +294,8 @@ mysql -ugigtrack -pgigtrack_pw gigtrack
 # Docker: docker compose exec mysql mysql -ugigtrack -pgigtrack_pw gigtrack
 ```
 ```sql
+SHOW Databases;
+USE gigtrack;
 SHOW TABLES;
 SELECT * FROM concerts LIMIT 5;
 SELECT ticket_id, tier, available_seats FROM tickets WHERE concert_id = 6;
