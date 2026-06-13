@@ -1,13 +1,29 @@
-scenario,iterations,avg_ms,p50_ms,p95_ms,p99_ms,cpu_ms,ops_per_sec
-MySQL trending (uncached),300,19.6506,18.9503,22.912,34.8783,9.248,50.9
-Redis cached,300,1.2526,1.1724,1.787,3.8184,0.2055,798.4
-MySQL indexed (status),300,19.2376,18.545,23.7662,31.2601,8.9786,52.0
-MySQL unindexed (base_price),300,20.2744,19.0255,24.3247,52.6583,9.1102,49.3
-Mongo indexed (concert_id),300,1.201,1.0027,1.8208,6.619,0.2751,832.7
-Mongo unindexed (rating),300,2.5295,1.972,5.0976,11.5138,0.7427,395.3
-MySQL payload LIMIT 5,300,22.9571,21.2116,35.3632,71.1174,9.8328,43.6
-MySQL payload LIMIT 20,300,20.5805,20.1646,24.2945,35.9435,9.6152,48.6
-MySQL payload LIMIT 50,300,21.9194,20.853,28.3363,43.5172,9.9607,45.6
+group,scenario,iterations,avg_ms,p50_ms,p95_ms,p99_ms,cpu_ms,ops_per_sec
+reads,MySQL trending (uncached),300,8.9447,8.584,11.6943,14.9436,7.0872,111.8
+reads,Redis cached,300,0.134,0.1261,0.1759,0.2489,0.102,7460.3
+reads,MySQL indexed (status),300,8.5794,8.3727,10.2055,14.2232,6.8309,116.6
+reads,MySQL unindexed (base_price),300,8.3151,8.2048,9.5952,12.3719,6.7021,120.3
+reads,Mongo indexed (concert_id),300,0.2461,0.2204,0.342,0.5255,0.1368,4063.6
+reads,Mongo unindexed (rating),300,0.2535,0.2433,0.3204,0.4388,0.1553,3944.4
+reads,MySQL payload LIMIT 5,300,8.5222,8.3068,10.0959,13.1861,6.7968,117.3
+reads,MySQL payload LIMIT 20,300,8.8336,8.551,10.3525,16.6234,7.0439,113.2
+reads,MySQL payload LIMIT 50,300,8.8974,8.6546,10.4743,12.2753,7.1007,112.4
+point,MySQL point (PRIMARY KEY),300,8.3403,8.1578,9.7146,12.2775,6.7506,119.9
+point,Mongo point (unique index),300,0.235,0.2174,0.3246,0.4161,0.1309,4256.2
+point,Redis point (GET),300,0.1025,0.0977,0.1347,0.1619,0.0744,9759.3
+compute,MySQL GROUP BY (revenue join),300,9.3965,8.6595,11.1525,22.3707,7.3053,106.4
+compute,MySQL window (RANK per city),300,9.1292,8.8311,11.501,15.6852,6.9663,109.5
+compute,Mongo $group (avg rating),300,0.4658,0.4016,0.772,1.4503,0.191,2146.9
+compute,Mongo $lookup (reviews+setlists),300,0.7614,0.7436,0.847,0.8904,0.2021,1313.4
+compute,Mongo $facet (dashboard),300,0.4398,0.4085,0.5173,0.6889,0.1311,2273.6
+writes,Redis write (SET),200,0.1011,0.1009,0.1267,0.1842,0.0717,9892.4
+writes,Mongo write (insert_one),200,0.2301,0.1871,0.2532,0.3455,0.1163,4345.4
+writes,MySQL write (plain INSERT),200,2.3038,2.1013,3.438,4.2152,0.1962,434.1
+writes,MySQL write (INSERT + trigger),200,2.8295,2.5834,4.8182,6.3972,0.2225,353.4
+txn,MySQL 50 INSERTs / 1 commit,30,12.9216,11.3516,26.1065,34.1272,5.6286,77.4
+txn,MySQL 50 INSERTs / 50 commits,30,144.6526,141.4113,210.8451,247.4888,13.3712,6.9
+parallel,Redis cached x8 workers,300,2.4363,2.257,4.5056,9.5119,0.8019,3020.8
+parallel,MySQL trending x8 workers,300,20.6195,19.4394,32.3382,38.8359,9.076,382.5
 
-peak_rss_mb,39.4
+peak_rss_mb,52.4
 avg_cpu_percent,0.0

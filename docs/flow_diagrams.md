@@ -25,7 +25,7 @@ sequenceDiagram
     alt account disabled
         F-->>U: "This account has been disabled."
     else bcrypt.checkpw OK
-        F->>R: SETEX session:&lt;token&gt; 1800 user_id
+        F->>R: SETEX session:[token] 1800 user_id
         F-->>U: Set-Cookie (HttpOnly, SameSite=Lax) + redirect
     else wrong password
         F-->>U: "Invalid credentials"
@@ -33,8 +33,8 @@ sequenceDiagram
 
     Note over U,R: every later authenticated request
     U->>F: GET /concerts (cookie)
-    F->>R: GET session:&lt;token&gt; → user_id
-    F->>R: EXPIRE session:&lt;token&gt; 1800  (sliding refresh)
+    F->>R: GET session:[token] → user_id
+    F->>R: EXPIRE session:[token] 1800  (sliding refresh)
     F->>M: SELECT user row (incl. is_active)
 ```
 
