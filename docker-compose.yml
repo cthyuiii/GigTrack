@@ -71,15 +71,15 @@ services:
       S3_ACCESS_KEY:  minioadmin
       S3_SECRET_KEY:  minioadmin
       S3_BUCKET:      gigtrack-media
-    # Host port matches the native default (5000). On macOS, if AirPlay Receiver
+    # App is on 5050 (5000 is taken by macOS AirPlay). On macOS, if AirPlay Receiver
     # owns 5000, turn it off (System Settings > General > AirDrop & Handoff) or
-    # change the left number here (e.g. "5050:5000"). Flask listens on 5000 inside.
-    ports: ["5000:5000"]
+    # change the left number here (e.g. "5050:5050"). Flask listens on 5050 inside.
+    ports: ["5050:5050"]
     command: >
       sh -c "python mongo/seed.py;
              python app/storage.py || true;
              python scripts/fetch_artist_images.py || true;
-             python -m flask --app app/app.py run --host 0.0.0.0 --port 5000"
+             python -m flask --app app/app.py run --host 0.0.0.0 --port 5050"
 
 volumes:
   mysql_data:

@@ -264,3 +264,41 @@ def test_session_ttl_slides_on_activity(customer_client):
     redis_client.expire(key, 100)            # simulate an old session
     customer_client.get("/concerts")          # any authenticated request
     assert redis_client.ttl(key) > 100        # TTL refreshed (to SESSION_TTL)
+
+
+# ---- admin dashboard: advanced-SQL analytics + the view --------------------------
+
+def test_admin_dashboard_analytics_render(admin_client):
+    """The window-function, GROUP BY+HAVING and CTE panels render on /admin."""
+    r = admin_client.get("/admin")
+    assert r.status_code == 200
+    body = r.get_data(as_text=True)
+    assert "Live analytics" in body
+    assert "Top earner per city" in body
+    assert "Top artists by revenue" in body
+
+
+def test_admin_concerts_list_renders(admin_client):
+    """The admin concert list (served from the v_concert_summary view) renders."""
+    r = admin_client.get("/admin/concerts")
+    assert r.status_code == 200
+    assert "Seats left" in r.get_data(as_text=True)   # a column the view provides
+
+
+def test_advanced_sql_executes():
+    """The view, the window function and a CTE all run against the database."""
+    from db import query_all, query_one
+    # The reusable view exists and exposes its computed columns.
+    row = query_one("SELECT concert_id, from_price, seats_left "
+                    "FROM v_concert_summary LIMIT 1")
+    assert row is not None and "from_price" in row
+    # Window function (RANK partitioned by city).
+    ranked = query_all(
+        "SELECT * FROM ("
+        "  SELECT v.city, RANK() OVER (PARTITION BY v.city ORDER BY c.concert_id) rk"
+        "  FROM concerts c JOIN venues v ON v.venue_id = c.venue_id) z "
+        "WHERE rk = 1")
+    assert isinstance(ranked, list) and ranked
+    # Common Table Expression.
+    cte = query_all("WITH x AS (SELECT 1 AS n) SELECT n FROM x")
+    assert cte and cte[0]["n"] == 1

@@ -31,13 +31,13 @@ uses four datastores, each for what it's best at:
 
 ## Ports (host → container)
 
-Host ports match the native defaults, so the same `.env` works whether you run
+The datastore host ports match their native defaults and the app uses 5050, so the same `.env` works whether you run
 the datastores natively or in Docker. Because nothing is remapped, stop any local
 service already using these ports before `docker compose up`.
 
 | Service | In browser / from host | Inside the compose network |
 |---|---|---|
-| **App (Flask)** | <http://localhost:5000> | `app:5000` |
+| **App (Flask)** | <http://localhost:5050> | `app:5050` |
 | MySQL | `localhost:3306` | `mysql:3306` |
 | MongoDB | `localhost:27017` | `mongo:27017` |
 | Redis | `localhost:6379` | `redis:6379` |
@@ -139,8 +139,8 @@ post, just without photos, and artist cards show the gradient placeholder.)
 
 ### 5. Point the app at the native services and run
 
-Native services use their **default ports**, which differ from the Docker-mapped
-ones, so set `.env` accordingly:
+Native services use their **default ports**, which are the same as the Docker host
+ports, so set `.env` accordingly:
 
 ```bash
 cp .env.example .env
@@ -172,7 +172,7 @@ export PYTHONPATH=$PWD/app                             # PowerShell: $env:PYTHON
 python mongo/seed.py                    # seeds MongoDB collections
 python app/storage.py                   # creates the MinIO bucket
 python scripts/fetch_artist_images.py   # real portraits → MinIO
-flask --app app/app.py run              # → http://localhost:5000
+flask --app app/app.py run --port 5050   # → http://localhost:5050
 ```
 
 `.env` is loaded automatically by every entry point (python-dotenv) and is
@@ -186,7 +186,7 @@ injects every variable into the app container.
 ```bash
 docker compose up --build
 # First boot takes ~1 min: MySQL + Mongo seed, and artist photos download.
-open http://localhost:5000          # Linux: xdg-open, Windows: start
+open http://localhost:5050          # Linux: xdg-open, Windows: start
 ```
 
 Sample logins (password is `password` for everyone):
@@ -232,8 +232,8 @@ python mongo/seed.py
 python app/storage.py                  # creates the MinIO bucket
 python scripts/fetch_artist_images.py  # real portraits → MinIO
 
-# 5. Run the app (local Flask defaults to port 5000).
-flask --app app/app.py run             # → http://localhost:5000
+# 5. Run the app (on 5050; 5000 is taken by macOS AirPlay).
+flask --app app/app.py run --port 5050   # → http://localhost:5050
 ```
 
 ## Troubleshooting (local setup)
@@ -261,9 +261,9 @@ Common issues when running natively (mostly macOS) and how to fix them:
   brew install mongodb-community@7.0 && brew services start mongodb-community@7.0
   ```
 
-- **Port 5000 already in use / app won't bind (macOS AirPlay Receiver owns 5000).** Run on another port, or turn AirPlay Receiver off in System Settings > General > AirDrop & Handoff:
+- **The app's port (5050) is already in use, or you want 5000 (which macOS AirPlay Receiver owns).** Run on another port, or turn AirPlay Receiver off in System Settings > General > AirDrop & Handoff:
   ```bash
-  flask --app app/app.py run --port 5001   # then open http://localhost:5001
+  flask --app app/app.py run --port 5060   # then open http://localhost:5060
   ```
 
 - **`Can't connect to MySQL / MongoDB / Redis (Connection refused)`.** Both native and Docker now use the same host ports (3306 / 27017 / 6379), so the same `.env` works either way; just don't run a local datastore and its Docker container on the same port at once. Confirm the service is up (`brew services list` or `docker compose ps`).
@@ -345,6 +345,63 @@ MONITOR                      # live stream of every command (Ctrl-C to stop)
   ```
 
 > `docs/demo_cli.md` has step-by-step before/after scenarios (sign up, book, review, cache hit) that show each store changing live as you use the app.
+
+## Stopping everything
+
+### All in Docker
+```bash
+docker compose stop          # pause containers, keep them and the data
+docker compose down          # stop AND remove the containers (data volumes kept)
+docker compose down -v       # also delete the data volumes (next up reseeds from scratch)
+```
+
+### Native + local Flask, macOS (Homebrew)
+```bash
+# 1. Stop the app: press Ctrl-C in the terminal running `flask run`, then:
+deactivate                   # leave the Python virtualenv (optional)
+
+# 2. Stop the datastores
+brew services stop mysql
+brew services stop mongodb-community@7.0
+brew services stop redis
+# MinIO: press Ctrl-C in the terminal running `minio server`
+#        (or, if backgrounded:  pkill -f 'minio server')
+
+brew services list           # confirm everything shows "stopped"
+```
+
+### Native + local Flask, Linux (systemd)
+```bash
+# 1. Ctrl-C the `flask run`, then (optional) `deactivate` the virtualenv.
+# 2. Stop the datastores (service names vary slightly by distro):
+sudo systemctl stop mysql        # or: mysqld / mariadb
+sudo systemctl stop mongod
+sudo systemctl stop redis-server # or: redis
+# MinIO: Ctrl-C its terminal (or: pkill -f 'minio server')
+systemctl is-active mysql mongod redis-server   # confirm "inactive"
+```
+
+### Native + local Flask, Windows
+```powershell
+# 1. Press Ctrl-C in the terminal running `flask run`; `deactivate` the venv.
+# 2. Stop the services (PowerShell as Administrator):
+net stop MySQL80                 # service name from `Get-Service *mysql*`
+net stop MongoDB
+# Redis (Memurai): net stop Memurai   ; or stop "Redis" in services.msc
+# MinIO: close/Ctrl-C its window (or end the minio.exe task)
+Get-Service MySQL80, MongoDB     # confirm "Stopped"
+```
+> Don't know a service's exact name? `Get-Service *mysql*` / `*mongo*` / `*redis*`
+> lists it. You can also stop any of these from the **Services** app (`services.msc`).
+
+### Hybrid (datastores in Docker, Flask local)
+```bash
+# Ctrl-C the local `flask run`, then stop the datastore containers:
+docker compose stop          # or: docker compose down  (down -v to wipe data)
+```
+
+> `docker compose stop` is the gentle option (resume later with `docker compose start`).
+> `down` removes containers but keeps your seeded data; only `down -v` wipes it.
 
 ## Project layout
 

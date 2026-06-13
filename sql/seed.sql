@@ -739,3 +739,14 @@ INSERT INTO follows (user_id, artist_id) VALUES
   (21, 16),
   (21, 17),
   (21, 18);
+
+-- ============================================================
+-- Demo state: drive a few scheduled concerts under 20% inventory so the
+-- admin "Selling fast" analytics panel always has rows to show.
+-- (Direct UPDATE of available_seats; price is unchanged so the VIP-pricing
+--  trigger is unaffected, and CHECK 0 <= available_seats <= total still holds.)
+-- ============================================================
+UPDATE tickets t
+JOIN  (SELECT concert_id FROM concerts WHERE status = 'scheduled'
+       ORDER BY concert_id LIMIT 3) sf ON sf.concert_id = t.concert_id
+SET   t.available_seats = GREATEST(0, FLOOR(t.total_seats * 0.08));

@@ -3,7 +3,7 @@ GigTrack - Flask web application entry point.
 
 Run:
     export FLASK_APP=app/app.py
-    flask run --port 5000
+    flask run --port 5050
 """
 import io
 import json
@@ -804,7 +804,75 @@ def admin_home():
                (SELECT COALESCE(SUM(total_price),0) FROM bookings WHERE status='confirmed') AS revenue
         """
     )
-    return render_template("admin/dashboard.html", stats=stats)
+
+    # ---- Live analytics: advanced SQL run on demand for the dashboard --------
+    # 1) WINDOW FUNCTION: the top-earning concert in each city (RANK partitioned
+    #    by city), so we get one row per city without a self-join.
+    leaderboard = query_all(
+        """
+        SELECT city, title, headliner, revenue FROM (
+            SELECT v.city, c.title, a.name AS headliner,
+                   COALESCE(SUM(b.total_price), 0) AS revenue,
+                   RANK() OVER (PARTITION BY v.city
+                                ORDER BY COALESCE(SUM(b.total_price), 0) DESC) AS city_rank
+            FROM   concerts c
+            JOIN   venues  v ON v.venue_id  = c.venue_id
+            JOIN   artists a ON a.artist_id = c.headline_artist_id
+            LEFT   JOIN tickets  t ON t.concert_id = c.concert_id
+            LEFT   JOIN bookings b ON b.ticket_id  = t.ticket_id AND b.status = 'confirmed'
+            GROUP  BY v.city, c.concert_id, c.title, a.name
+        ) ranked
+        WHERE city_rank = 1 AND revenue > 0
+        ORDER BY revenue DESC
+        LIMIT 8
+        """
+    )
+    # 2) AGGREGATION + HAVING: scheduled concerts selling fast (low inventory).
+    at_risk = query_all(
+        """
+        SELECT c.title, v.city,
+               SUM(t.available_seats) AS seats_left,
+               SUM(t.total_seats)     AS seats_total,
+               ROUND(100 * SUM(t.available_seats) / NULLIF(SUM(t.total_seats), 0), 1) AS pct_left
+        FROM   concerts c
+        JOIN   venues  v ON v.venue_id = c.venue_id
+        JOIN   tickets t ON t.concert_id = c.concert_id
+        WHERE  c.status = 'scheduled'
+        GROUP  BY c.concert_id, c.title, v.city
+        HAVING pct_left < 20
+        ORDER  BY pct_left ASC
+        LIMIT 8
+        """
+    )
+    # 3) CTE: artists whose total revenue beats the average artist's.
+    top_artists = query_all(
+        """
+        WITH concert_revenue AS (
+            SELECT c.concert_id, c.headline_artist_id,
+                   COALESCE(SUM(b.total_price), 0) AS revenue
+            FROM   concerts c
+            LEFT   JOIN tickets  t ON t.concert_id = c.concert_id
+            LEFT   JOIN bookings b ON b.ticket_id  = t.ticket_id AND b.status = 'confirmed'
+            GROUP  BY c.concert_id, c.headline_artist_id
+        ),
+        artist_totals AS (
+            SELECT headline_artist_id AS artist_id,
+                   SUM(revenue) AS total_revenue, COUNT(*) AS shows
+            FROM   concert_revenue
+            GROUP  BY headline_artist_id
+        )
+        SELECT a.name, at.shows, at.total_revenue,
+               ROUND(at.total_revenue / NULLIF(at.shows, 0), 2) AS avg_per_show
+        FROM   artist_totals at
+        JOIN   artists a ON a.artist_id = at.artist_id
+        WHERE  at.total_revenue > (SELECT AVG(total_revenue) FROM artist_totals)
+        ORDER  BY at.total_revenue DESC
+        LIMIT 8
+        """
+    )
+    return render_template("admin/dashboard.html", stats=stats,
+                           leaderboard=leaderboard, at_risk=at_risk,
+                           top_artists=top_artists)
 
 
 # ---- admin: concerts ----------------------------------------------------
@@ -813,20 +881,20 @@ def admin_home():
 @admin_required
 def admin_concerts():
     q = (request.args.get("q") or "").strip()
+    # Backed by the v_concert_summary SQL view (joins concerts + venues +
+    # artists and adds from_price / seats_left), so the route stays simple.
     sql = """
-        SELECT c.concert_id, c.title, c.concert_date, c.status, c.base_price,
-               v.name AS venue, a.name AS headliner
-        FROM   concerts c
-        JOIN   venues  v ON v.venue_id  = c.venue_id
-        JOIN   artists a ON a.artist_id = c.headline_artist_id
+        SELECT concert_id, title, concert_date, status, venue, city,
+               headliner, from_price, seats_left
+        FROM   v_concert_summary
     """
     params = ()
     if q:
-        sql += (" WHERE c.title LIKE %s OR a.name LIKE %s OR v.name LIKE %s"
-                " OR v.city LIKE %s")
+        sql += (" WHERE title LIKE %s OR headliner LIKE %s OR venue LIKE %s"
+                " OR city LIKE %s")
         like = f"%{q}%"
         params = (like, like, like, like)
-    sql += " ORDER BY c.concert_date DESC"
+    sql += " ORDER BY concert_date DESC"
     concerts = query_all(sql, params)
     return render_template("admin/concerts.html", concerts=concerts, q=q)
 
@@ -1304,4 +1372,4 @@ if __name__ == "__main__":
     # Debug is OFF unless FLASK_DEBUG=1 - never ship debug=True (it exposes an
     # interactive console / stack traces to anyone who can reach the app).
     debug = os.environ.get("FLASK_DEBUG") == "1"
-    app.run(host="0.0.0.0", port=5000, debug=debug)
+    app.run(host="0.0.0.0", port=5050, debug=debug)

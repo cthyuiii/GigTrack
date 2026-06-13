@@ -16,4 +16,64 @@
     <a class="btn-ghost" href="{{ url_for('admin_bookings') }}">Manage bookings</a>
     <a class="btn-ghost" href="{{ url_for('admin_users') }}">Manage users</a>
   </p>
+
+  <h2>Live analytics</h2>
+  <p class="muted">Computed live from the current data each time you open this page.</p>
+
+  <h3>Top earner per city</h3>
+  {% if leaderboard %}
+  <table>
+    <thead><tr><th>City</th><th>Concert</th><th>Headliner</th><th>Revenue</th></tr></thead>
+    <tbody>
+      {% for r in leaderboard %}
+        <tr>
+          <td>{{ r.city }}</td>
+          <td>{{ r.title }}</td>
+          <td>{{ r.headliner }}</td>
+          <td>${{ '%.2f'|format(r.revenue) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No confirmed revenue yet.</p>
+  {% endif %}
+
+  <h3>Selling fast, under 20% inventory left</h3>
+  {% if at_risk %}
+  <table>
+    <thead><tr><th>Concert</th><th>City</th><th>Seats left</th><th>% left</th></tr></thead>
+    <tbody>
+      {% for r in at_risk %}
+        <tr>
+          <td>{{ r.title }}</td>
+          <td>{{ r.city }}</td>
+          <td>{{ r.seats_left }} / {{ r.seats_total }}</td>
+          <td>{{ '%.1f'|format(r.pct_left) }}%</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">All scheduled concerts have healthy inventory (none under 20% left).</p>
+  {% endif %}
+
+  <h3>Top artists by revenue</h3>
+  {% if top_artists %}
+  <table>
+    <thead><tr><th>Artist</th><th>Shows</th><th>Total revenue</th><th>Avg / show</th></tr></thead>
+    <tbody>
+      {% for r in top_artists %}
+        <tr>
+          <td>{{ r.name }}</td>
+          <td>{{ r.shows }}</td>
+          <td>${{ '%.2f'|format(r.total_revenue) }}</td>
+          <td>${{ '%.2f'|format(r.avg_per_show) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No revenue data yet.</p>
+  {% endif %}
 {% endblock %}

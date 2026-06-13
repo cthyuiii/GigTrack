@@ -7,6 +7,7 @@ DROP TRIGGER IF EXISTS trg_booking_decrement_seats;
 DROP TRIGGER IF EXISTS trg_booking_restore_seats_on_cancel;
 DROP TRIGGER IF EXISTS trg_ticket_vip_price_ins;
 DROP TRIGGER IF EXISTS trg_ticket_vip_price_upd;
+DROP VIEW IF EXISTS v_concert_summary;
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS concert_artists;
@@ -203,3 +204,17 @@ BEGIN
 END//
 
 DELIMITER ;
+
+-- ------------------------------------------------------------
+-- Reusable view (also demonstrated in sql/queries.sql section F).
+-- Created here so a plain schema load has it available for the app and demos.
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW v_concert_summary AS
+SELECT c.concert_id, c.title, c.concert_date, c.status,
+       v.name AS venue, v.city,
+       a.name AS headliner, a.genre,
+       (SELECT MIN(price) FROM tickets t WHERE t.concert_id = c.concert_id) AS from_price,
+       (SELECT SUM(available_seats) FROM tickets t WHERE t.concert_id = c.concert_id) AS seats_left
+FROM   concerts c
+JOIN   venues  v ON v.venue_id  = c.venue_id
+JOIN   artists a ON a.artist_id = c.headline_artist_id;

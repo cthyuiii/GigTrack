@@ -214,6 +214,19 @@ def main():
     rows = [f"  ({u}, {a})" for u, a in sorted(pairs)]
     w(",\n".join(rows) + ";\n")
 
+    # ---- demo state: a few scheduled concerts under 20% inventory ----
+    # Drives the admin "Selling fast" analytics panel so it always has rows.
+    # Direct UPDATE of available_seats; price is unchanged so the VIP-pricing
+    # trigger is unaffected, and CHECK (0 <= available_seats <= total) holds.
+    w("-- ============================================================")
+    w("-- Demo state: drive a few scheduled concerts under 20% inventory so the")
+    w("-- admin 'Selling fast' analytics panel always has rows to show.")
+    w("-- ============================================================")
+    w("UPDATE tickets t")
+    w("JOIN  (SELECT concert_id FROM concerts WHERE status = 'scheduled'")
+    w("       ORDER BY concert_id LIMIT 3) sf ON sf.concert_id = t.concert_id")
+    w("SET   t.available_seats = GREATEST(0, FLOOR(t.total_seats * 0.08));\n")
+
     out = os.path.join(os.path.dirname(__file__), "..", "sql", "seed.sql")
     out = os.path.abspath(out)
     with open(out, "w") as fh:

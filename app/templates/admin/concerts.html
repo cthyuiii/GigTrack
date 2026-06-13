@@ -15,16 +15,18 @@
   {% if q %}<p class="muted">{{ concerts|length }} result(s) for “{{ q }}”.</p>{% endif %}
 
   <table>
-    <thead><tr><th>Title</th><th>Headliner</th><th>Venue</th><th>Date</th><th>Status</th><th>Base $</th><th></th></tr></thead>
+    <thead><tr><th>Title</th><th>Headliner</th><th>Venue</th><th>City</th><th>Date</th><th>Status</th><th>From $</th><th>Seats left</th><th></th></tr></thead>
     <tbody>
       {% for c in concerts %}
         <tr>
           <td>{{ c.title }}</td>
           <td>{{ c.headliner }}</td>
           <td>{{ c.venue }}</td>
+          <td>{{ c.city }}</td>
           <td>{{ c.concert_date.strftime('%d %b %Y') if c.concert_date.__class__.__name__ == 'datetime' else c.concert_date }}</td>
           <td>{{ c.status }}</td>
-          <td>${{ '%.2f'|format(c.base_price) }}</td>
+          <td>{{ '$%.2f'|format(c.from_price) if c.from_price is not none else 'n/a' }}</td>
+          <td>{{ c.seats_left if c.seats_left is not none else 'n/a' }}</td>
           <td class="row-actions">
             <a href="{{ url_for('admin_concert_edit', concert_id=c.concert_id) }}">Edit</a>
             <form method="post" action="{{ url_for('admin_concert_delete', concert_id=c.concert_id) }}"

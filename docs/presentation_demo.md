@@ -125,7 +125,7 @@ Open a `mongosh` CLI and the MinIO console.
 
 ## Pre-recording checklist
 
-- [ ] `docker compose down -v && docker compose up --build`, confirm <http://localhost:5000> loads with images.
+- [ ] `docker compose down -v && docker compose up --build`, confirm <http://localhost:5050> loads with images.
 - [ ] One terminal each: `mysql`, `mongosh`, `redis-cli`, MinIO console open.
 - [ ] Use a fresh customer account so the 6-ticket limit demo is clean.
 - [ ] Pre-run `benchmark.py` once so numbers/chart are ready to show.
