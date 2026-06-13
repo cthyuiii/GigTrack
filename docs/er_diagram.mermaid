@@ -11,6 +11,7 @@ erDiagram
     TICKETS ||--o{ BOOKINGS : "is purchased in"
     CONCERTS ||--o{ REVIEWS_PTR : "is reviewed in (Mongo)"
     CONCERTS ||--o{ SETLISTS_PTR : "has setlist (Mongo)"
+    ARTISTS ||--o| ARTIST_BIOS_PTR : "has bio (Mongo)"
 
     USERS {
         int user_id PK
@@ -89,11 +90,41 @@ erDiagram
         int concert_id "logical FK"
         int user_id "logical FK"
         int rating "1-5"
+        string title
+        string body "full-text indexed"
+        array tags
         array liked_by "user_ids (dedup likes)"
         array photos "{url,key} -> MinIO"
+        datetime posted_at
     }
 
     SETLISTS_PTR {
         string mongo_setlist_id "stored in MongoDB.setlists"
         int concert_id "logical FK"
+    }
+
+    ARTIST_BIOS_PTR {
+        string mongo_bio_id "stored in MongoDB.artist_bios"
+        int artist_id "logical FK (unique)"
+        string bio_text
+        array tour_history
+        array related_artists
+    }
+
+    %% legend: which entities live in which store
+    "RELATIONAL (MySQL)" {
+        table USERS
+        table ARTISTS
+        table VENUES
+        table CONCERTS
+        table CONCERT_ARTISTS
+        table TICKETS
+        table BOOKINGS
+        table FOLLOWS
+    }
+
+    "NON-RELATIONAL (MongoDB)" {
+        collection REVIEWS_PTR
+        collection SETLISTS_PTR
+        collection ARTIST_BIOS_PTR
     }
