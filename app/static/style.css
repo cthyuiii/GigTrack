@@ -337,6 +337,12 @@ th { color: var(--muted); font-weight: 600; }
   border: 1px solid var(--hot); color: #ffb3c4; padding: 0.4rem 0.8rem;
   border-radius: 8px; font-size: 0.9rem; }
 
+/* ---- "event is over" banner on past concerts ---- */
+.event-over { display: block; background: rgba(255,176,46,0.12);
+  border: 1px solid #ffb02e; color: #ffd591; padding: 0.6rem 0.9rem;
+  border-radius: 8px; font-size: 0.95rem; margin: 0.5rem 0; }
+.event-over strong { color: #ffc875; }
+
 /* ---- manual artist/venue entry in concert form ---- */
 .entity-pick { display: flex; flex-direction: column; gap: 0.4rem; }
 .entity-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

@@ -285,6 +285,26 @@ def test_admin_concerts_list_renders(admin_client):
     assert "Seats left" in r.get_data(as_text=True)   # a column the view provides
 
 
+def test_past_concert_booking_blocked(customer_client):
+    """A past event shows the 'event is over' notice and rejects booking."""
+    from db import query_one
+    past = query_one(
+        "SELECT c.concert_id, t.ticket_id "
+        "FROM concerts c JOIN tickets t ON t.concert_id = c.concert_id "
+        "WHERE c.concert_date < NOW() ORDER BY c.concert_id LIMIT 1")
+    assert past, "seed should contain at least one past concert"
+    cid = past["concert_id"]
+    page = customer_client.get(f"/concerts/{cid}").get_data(as_text=True)
+    assert "event is over" in page.lower()
+    before = query_one("SELECT COUNT(*) AS n FROM bookings")["n"]
+    customer_client.post(
+        f"/concerts/{cid}/book",
+        data={**CSRF, "ticket_id": past["ticket_id"], "quantity": 1},
+        follow_redirects=True)
+    after = query_one("SELECT COUNT(*) AS n FROM bookings")["n"]
+    assert after == before, "booking a past concert must not create a booking"
+
+
 def test_advanced_sql_executes():
     """The view, the window function and a CTE all run against the database."""
     from db import query_all, query_one

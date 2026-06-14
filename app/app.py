@@ -453,10 +453,14 @@ def concert_detail(concert_id):
         remaining_quota = MAX_TICKETS_PER_CONCERT - booked_qty_for_concert(me, concert_id)
         remaining_quota = max(0, remaining_quota)
 
+    # Past events can no longer be booked; the template shows an "event over" notice.
+    cd = concert.get("concert_date")
+    is_past = bool(isinstance(cd, datetime) and cd < datetime.now())
+
     return render_template(
         "concert_detail.html",
         concert=concert, lineup=lineup, tickets=tickets,
-        setlist=setlist, reviews=reviews,
+        setlist=setlist, reviews=reviews, is_past=is_past,
         max_per_concert=MAX_TICKETS_PER_CONCERT, remaining_quota=remaining_quota,
     )
 
@@ -512,6 +516,17 @@ def book_ticket(concert_id):
     # create a junk booking and, for negatives, try to *inflate* inventory.
     if quantity < 1 or quantity > MAX_TICKETS_PER_CONCERT:
         flash(f"Please choose a quantity between 1 and {MAX_TICKETS_PER_CONCERT}.")
+        return redirect(url_for("concert_detail", concert_id=concert_id))
+
+    # Block bookings for events that have already happened or aren't on sale.
+    cstate = query_one("SELECT concert_date, status FROM concerts WHERE concert_id=%s",
+                       (concert_id,))
+    if not cstate:
+        abort(404)
+    cdate = cstate.get("concert_date")
+    if (isinstance(cdate, datetime) and cdate < datetime.now()) or \
+       cstate.get("status") in ("completed", "cancelled"):
+        flash("This event is over. Tickets are no longer available.")
         return redirect(url_for("concert_detail", concert_id=concert_id))
 
     # Quota + insert happen in ONE transaction. Locking this concert's ticket

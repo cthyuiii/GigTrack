@@ -14,6 +14,9 @@
           {{ concert.concert_date.strftime('%a %d %b %Y, %H:%M') if concert.concert_date.__class__.__name__ == 'datetime' else concert.concert_date }} ·
           status: <strong>{{ concert.status }}</strong>
         </p>
+        {% if is_past %}
+          <p class="event-over"><strong>This event is over.</strong> It has already taken place, so tickets are no longer available.</p>
+        {% endif %}
       </div>
     </div>
 
@@ -28,7 +31,9 @@
 
     <section class="tickets">
       <h2>Tickets</h2>
-      {% if g.user and g.user.is_admin %}
+      {% if is_past %}
+        <p class="event-over"><strong>This event is over.</strong> Booking is closed for past events.</p>
+      {% elif g.user and g.user.is_admin %}
         <p class="muted">You're signed in as an admin - ticket purchasing is for
         customer accounts. Manage bookings in the
         <a href="{{ url_for('admin_bookings') }}">admin dashboard</a>.</p>
@@ -51,7 +56,9 @@
               <span class="ticket-seats muted">{{ t.available_seats }} left</span>
             </div>
             <div class="ticket-action">
-              {% if g.user and not g.user.is_admin and t.available_seats > 0 and remaining_quota > 0 %}
+              {% if is_past %}
+                <span class="muted">Event ended</span>
+              {% elif g.user and not g.user.is_admin and t.available_seats > 0 and remaining_quota > 0 %}
                 <form class="book-form" method="post"
                       action="{{ url_for('book_ticket', concert_id=concert.concert_id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
