@@ -1,9 +1,11 @@
 # GigTrack - Benchmark Findings
 
 Analysis of `scripts/benchmark_results.csv` (300 iterations/scenario, 8 worker
-threads for `[parallel]`; client peak memory ≈ **52.4 MB**). Charts in this
-folder: `bench_overview.png` (all six groups), `bench_point_ladder.png`,
-`bench_txn_batching.png`.
+threads for `[parallel]`; client peak memory ≈ **69.7 MB**). This run was taken
+**after enabling MySQL connection pooling** (DBUtils `PooledDB` in `app/db.py`).
+Charts in this folder: `bench_overview.png` (main groups),
+`bench_point_ladder.png`, `bench_txn_batching.png`, and the pooling visuals
+`bench_pool.png` and `pooling_flow.png`.
 
 > Note: `avg_cpu_percent = 0.0` in the CSV is a sampling artifact (psutil takes
 > a 0.3 s reading on the idle process *after* the run); use the per-call `cpu_ms`
@@ -13,61 +15,58 @@ folder: `bench_overview.png` (all six groups), `bench_point_ladder.png`,
 
 | Group | Result | Take-away |
 |---|---|---|
-| reads | Redis cached **0.134 ms** vs MySQL uncached join **8.94 ms** | Cache is **~67× faster** (7,460 vs 112 ops/s) |
-| reads | MySQL indexed 8.58 ms vs full-scan 8.32 ms; Mongo idx 0.246 vs scan 0.254 ms | **No measurable index benefit at seed scale** |
-| reads | LIMIT 5 / 20 / 50 = 8.52 / 8.83 / 8.90 ms | Latency is **per-roundtrip, not per-row** (10× rows → +4%) |
-| point | Redis 0.102 ms · Mongo 0.235 ms · MySQL PK **8.34 ms** | Redis **81×**, Mongo **35×** faster than the MySQL PK lookup |
-| compute | Mongo `$facet` cpu 0.13 ms ≪ wall 0.44 ms; `$lookup` 0.76 ms (priciest Mongo op) | Mongo: the **engine** did the work, not the client |
-| writes | plain INSERT 2.30 ms → INSERT+trigger **2.83 ms** | Seat trigger costs **+0.53 ms (+23%)** per booking |
-| txn (MySQL only) | 1 commit/50 rows 12.9 ms (0.258 ms/row) vs 50 commits 144.7 ms (2.893 ms/row) | Batching is **~11× cheaper**; ~2.69 ms per extra fsync |
-| parallel | Redis 7,460 → 3,021 ops/s; MySQL 112 → 382 ops/s (1→8 threads) | MySQL **scales ~3.4×**; Redis **drops** under Python threads |
+| reads | Redis cached **1.14 ms** vs MySQL uncached join **3.99 ms** | Cache is **~3.5x faster** (881 vs 250 ops/s) |
+| pool | MySQL read, new connection **17.24 ms** vs pooled **5.00 ms** | Pooling is **~3.4x faster**, ~12 ms saved per call |
+| reads | MySQL indexed 4.23 ms vs full-scan 3.95 ms; Mongo idx 1.14 vs scan 1.49 ms | **No measurable index benefit at seed scale** |
+| reads | LIMIT 5 / 20 / 50 = 4.03 / 4.37 / 4.60 ms | Latency is **per-roundtrip, not per-row** (10x rows -> +14%) |
+| point | Redis 1.16 ms . Mongo 1.29 ms . MySQL PK **4.64 ms** | Redis **~4x**, Mongo **~3.6x** faster than the MySQL PK lookup |
+| compute | Mongo `$facet` 1.54 ms, `$lookup` 2.41 ms (priciest Mongo op); MySQL GROUP BY 5.02 ms, window 4.71 ms | Server-side compute is cheap on both stores |
+| writes | plain INSERT 4.45 ms -> INSERT+trigger **4.98 ms** | Seat trigger costs **+0.53 ms (+12%)** per booking |
+| txn (MySQL only) | 1 commit/50 rows 67.26 ms (1.35 ms/row) vs 50 commits 231.35 ms (4.63 ms/row) | Batching is **~3.4x cheaper**; ~3.3 ms per extra fsync |
+| parallel | Redis 881 -> 2,016 ops/s; MySQL 250 -> 222 ops/s (1->8 threads) | Redis **scales ~2.3x**; pooled MySQL stays **flat** |
 
 ## The interesting / surprising findings
 
-**1. "MySQL is slow" is really a connection-pooling story, not a query story.**
-The 3-table trending join (8.94 ms) and a single-row primary-key lookup
-(8.34 ms) cost almost the same - and both match the indexed/unindexed/payload
-reads (~8.3–8.9 ms). The actual query work is sub-millisecond; the ~8 ms floor
-is **opening a fresh MySQL connection on every call** (`get_mysql()` connects
-per request - no pool). Proof: the write scenarios reuse one connection and a
-plain INSERT is only **2.30 ms**, so ≈ 6 ms of every read is connection setup.
-A connection pool would close most of the gap to Redis/Mongo. *(This is the
-strongest discussion point - and an easy, honest "future work" item.)*
+**1. Connection pooling was the single highest-impact change.** The `[pool]`
+group isolates the connection layer by running the *same* read with a fresh
+`pymysql.connect` on every call versus a connection borrowed from the pool:
+**17.24 ms drops to 5.00 ms (~3.4x), about 12 ms saved per call**. That ~12 ms
+was pure TCP + authentication handshake. We implemented the pool (DBUtils
+`PooledDB` wrapping PyMySQL, `app/db.py`) and re-ran the suite to prove it; this
+is why every relational read in this run is far quicker than in our earlier,
+unpooled numbers. See `pooling_flow.png` / `bench_pool.png`.
 
-**2. The cache win is much bigger than we'd claimed (~67×, not ~16–30×).**
-With both stores warm and on this machine, Redis serves the trending payload
-0.134 ms vs 8.94 ms uncached. Because part of that gap is MySQL's
-connect-per-call (point 1), the cache is doing two jobs at once: skipping the
-join *and* skipping a connection.
+**2. With pooling on, the cache win is real but moderate (~3.5x, not ~67x).**
+Once the per-call connection cost is removed, the warm Redis read (1.14 ms) is
+about 3.5x faster than the uncached three-table MySQL join (3.99 ms) - the cache
+now buys you the *join work*, not a hidden connection. The earlier "~67x"
+headline was mostly the connect-per-call penalty, which pooling has eliminated.
 
 **3. Indexing shows no measurable benefit at seed volume - on either store.**
 At 50 concerts / 220 reviews the optimiser scans either way, so indexed and
-full-scan times are within noise (and the scan is even marginally faster on
-MySQL). This is expected and worth stating honestly: to *demonstrate* the index
-value, either enlarge the dataset or show the `EXPLAIN` plan difference rather
-than wall-clock time.
+full-scan times are within noise (MySQL indexed 4.23 vs scan 3.95 ms). To
+*demonstrate* index value, enlarge the dataset or show the `EXPLAIN` plan
+difference rather than wall-clock time.
 
-**4. Concurrency is counter-intuitive: Redis throughput falls, MySQL rises.**
-From 1 → 8 threads, MySQL aggregate throughput scales ~3.4× (each thread opens
-its own connection, so DB I/O-wait overlaps), while Redis **drops** from 7,460
-to 3,021 ops/s. The Redis path is bottlenecked on the Python **GIL** (JSON
-parsing) and a single shared client, which threads can't parallelise - they add
-contention instead. Redis is still 7.9× MySQL's throughput and 8.5× lower
-per-call latency under load, but it doesn't scale with Python threads. *(A
-process pool or pipelining, not threads, is the way to scale the cache path.)*
+**4. Concurrency: Redis scales, pooled MySQL stays flat.** From 1 -> 8 threads,
+Redis aggregate throughput rises ~2.3x (881 -> 2,016 ops/s) while pooled MySQL
+is essentially flat (250 -> 222 ops/s): the pool caps the number of concurrent
+connections and Python's **GIL** serialises client-side parsing, so neither
+path scales linearly with threads. Redis is still far faster per call. *(A
+process pool or pipelining, not threads, is the way to scale further.)*
 
-**5. The seat trigger is cheap and now precisely priced.** Integrity (lock the
-ticket row, check availability, decrement inventory) costs **+0.53 ms / +23%**
+**5. The seat trigger is cheap and precisely priced.** Integrity (lock the
+ticket row, check availability, decrement inventory) costs **+0.53 ms / +12%**
 on top of a plain INSERT - a clear, defensible trade-off for correctness.
 
-**6. Commit batching is the classic 11× durability result.** This compares two
-strategies on the **same MySQL table** (not two different databases): fifty
-individual commits cost 144.7 ms vs 12.9 ms for one batched commit - each extra
-commit ≈ 2.69 ms of fsync/roundtrip. Justifies the multi-row INSERTs in
-`generate_seed.py`.
+**6. Commit batching is a classic durability result.** Comparing two strategies
+on the **same MySQL table** (not two databases): fifty individual commits cost
+231.35 ms (4.63 ms/row) vs 67.26 ms (1.35 ms/row) for one batched commit -
+about **3.4x cheaper**, each extra commit ~3.3 ms of fsync/roundtrip. Justifies
+the multi-row INSERTs in `generate_seed.py`.
 
 ## Caveats for the write-up
 - All numbers are single-machine, warm-cache, localhost - relative ratios are
   the story, not absolute ms.
 - The `[parallel]` GIL effect is a property of the Python client, not Redis.
-- Indexing/“payload scaling” conclusions are scale-dependent (seed data is small).
+- Indexing / payload-scaling conclusions are scale-dependent (seed data is small).

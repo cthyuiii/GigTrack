@@ -57,11 +57,35 @@ _CONNECT_RETRIES = int(os.environ.get("MYSQL_CONNECT_RETRIES", "15"))
 _CONNECT_BACKOFF = float(os.environ.get("MYSQL_CONNECT_BACKOFF", "2"))
 
 
-def _connect_with_retry():
+# Connection pool. Reusing connections removes the per-request TCP + auth
+# handshake (the dominant cost of an uncached read in our benchmark). DBUtils'
+# PooledDB wraps PyMySQL: get_mysql() borrows a connection and "close()" returns
+# it to the pool instead of tearing down the socket. mincached=0 keeps pool
+# creation lazy (no connect at import, so the app still imports when MySQL is
+# down); ping=1 checks a connection is alive before reuse and transparently
+# replaces a dropped one; reset=True rolls back any uncommitted state on return.
+from dbutils.pooled_db import PooledDB
+
+_POOL_MAX = int(os.environ.get("MYSQL_POOL_MAX", "10"))
+
+_pool = PooledDB(
+    creator=pymysql,
+    maxconnections=_POOL_MAX,
+    mincached=0,
+    maxcached=5,
+    blocking=True,      # wait for a free connection rather than erroring
+    ping=1,             # verify liveness before handing a connection out
+    reset=True,
+    **MYSQL_CONFIG,
+)
+
+
+def _pool_connection():
+    """Borrow a pooled connection, retrying while MySQL is still coming up."""
     last = None
     for attempt in range(1, _CONNECT_RETRIES + 1):
         try:
-            return pymysql.connect(**MYSQL_CONFIG)
+            return _pool.connection()
         except pymysql.err.OperationalError as e:
             # 2003 = can't connect, 2002 = socket, 1053 = shutting down.
             code = e.args[0] if e.args else None
@@ -76,10 +100,11 @@ def _connect_with_retry():
 
 @contextmanager
 def get_mysql():
-    """Yield a pymysql connection; commit on clean exit, rollback on error.
+    """Yield a pooled connection; commit on clean exit, rollback on error.
 
-    Connection is retried while MySQL is still coming up (see above)."""
-    conn = _connect_with_retry()
+    close() returns the connection to the pool (it is not torn down), and the
+    borrow is retried while MySQL is still coming up (see above)."""
+    conn = _pool_connection()
     try:
         yield conn
         conn.commit()
@@ -87,7 +112,7 @@ def get_mysql():
         conn.rollback()
         raise
     finally:
-        conn.close()
+        conn.close()   # returns the connection to the pool
 
 
 def query_all(sql, params=None):

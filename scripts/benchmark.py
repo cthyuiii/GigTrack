@@ -55,7 +55,9 @@ import statistics
 import threading
 import time
 
-from db import query_all, get_mysql, redis_client, mongo
+import pymysql
+
+from db import query_all, get_mysql, redis_client, mongo, MYSQL_CONFIG
 
 HERE = os.path.dirname(__file__)
 CSV_PATH = os.path.join(HERE, "benchmark_results.csv")
@@ -73,7 +75,7 @@ TRENDING_SQL = """
 """
 BENCH_KEY = "bench:trending"
 
-GROUP_ORDER = ["reads", "point", "compute", "writes", "txn", "parallel"]
+GROUP_ORDER = ["reads", "pool", "point", "compute", "writes", "txn", "parallel"]
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +183,25 @@ def read_scenarios(it):
     for lim in (5, 20, 50):
         out[f"MySQL payload LIMIT {lim}"] = measure(
             lambda lim=lim: query_all(TRENDING_SQL.format(limit=lim)), it)
+    return out
+
+
+def pool_scenarios(it):
+    """Connection pooling impact: a fresh connection per call vs a pooled one.
+    Same trending query both ways, so the delta is the per-call connect cost
+    (TCP + auth handshake) that PooledDB removes."""
+    sql = TRENDING_SQL.format(limit=20)
+
+    def fresh():                       # the old behaviour: connect-per-call
+        conn = pymysql.connect(**MYSQL_CONFIG)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql); cur.fetchall()
+        finally:
+            conn.close()
+    out = {}
+    out["MySQL read, new connection per call"] = measure(fresh, it)
+    out["MySQL read, pooled connection"] = measure(lambda: query_all(sql), it)
     return out
 
 
@@ -365,6 +386,7 @@ def main():
     redis_client.setex(BENCH_KEY, 600, json.dumps(payload, default=str))
 
     groups = {"reads": read_scenarios(it),
+              "pool": pool_scenarios(it),
               "point": point_lookup_scenarios(it),
               "compute": compute_scenarios(it)}
     if not args.skip_writes:
@@ -418,8 +440,9 @@ def main():
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        colors = {"reads": "#ff5266", "point": "#ffb02e", "compute": "#7c5cff",
-                  "writes": "#2ec4b6", "txn": "#3a86ff", "parallel": "#8d99ae"}
+        colors = {"reads": "#ff5266", "pool": "#1f6feb", "point": "#ffb02e",
+                  "compute": "#7c5cff", "writes": "#2ec4b6", "txn": "#3a86ff",
+                  "parallel": "#8d99ae"}
         names, avgs, cols = [], [], []
         for gname in GROUP_ORDER:
             for name, m in groups.get(gname, {}).items():
