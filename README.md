@@ -409,15 +409,6 @@ docker compose stop          # or: docker compose down  (down -v to wipe data)
 
 ```
 gigtrack/
-├── docs/
-│   ├── er_diagram.mermaid       ER diagram (Mermaid)
-│   ├── data_flow.svg            Sequence diagram across the 4 datastores
-│   ├── schema_design.md         Datastore rationale + SQL↔NoSQL discussion
-│   ├── demo_cli.md              CLI cheat-sheet + per-store demo scenarios
-│   ├── flow_diagrams.md         Mermaid flow diagrams for presentation/demo
-│   ├── presentation_demo.md     10-min video script (6 presenters)
-│   ├── report_structure.md      Proposal + final report outlines
-│   └── project_reference.md     File-by-file + dependency reference
 ├── sql/
 │   ├── schema.sql               8 tables, FKs, CHECK, indexes, 4 triggers
 │   ├── seed.sql                 GENERATED seed (scripts/generate_seed.py)
@@ -443,22 +434,6 @@ gigtrack/
 ├── Dockerfile
 └── requirements.txt
 ```
-
-## Demo script (short version)
-
-A full 10-minute video script for 6 presenters is in
-[`docs/presentation_demo.md`](docs/presentation_demo.md); live CLI scenarios for
-all four datastores are in [`docs/demo_cli.md`](docs/demo_cli.md).
-
-1. Landing page (`/`) - hero + category tiles + featured rail (artist photos from MinIO).
-2. Browse `/concerts?genre=Pop&city=Singapore` - filtered listing; second load served from Redis cache.
-3. Concert detail - lineup + tiers from MySQL; setlist & reviews from MongoDB; Redis view counter ticks.
-4. Log in as a customer → book tickets with the **+/- stepper**; try to exceed **6 per concert** → blocked with an error.
-5. Oversell attempt → `BEFORE INSERT` trigger rolls back; cancel a booking → `AFTER UPDATE` trigger restores seats.
-6. Post a review with a photo → text/metadata in Mongo, image blob in MinIO (show the MinIO console).
-7. Like a review twice → count doesn't double (per-user `liked_by` set).
-8. Log in as **admin** (`macc`) → `/admin`: add a concert with a new artist/venue + tiers (VIP-pricing rule enforced); search bookings; resize/cancel a customer booking.
-9. Run `scripts/benchmark.py` → cached vs uncached, indexed vs scan, CPU/memory.
 
 ## Running the performance benchmark
 
@@ -504,9 +479,6 @@ group exists to back one of those claims with a number instead of an assertion:
   serves concurrent users; this group shows whether throughput scales with
   workers and how much further the cache pulls ahead under load.
 
-(They also directly serve the brief's optional Task 7 - "database performance
-analysis, e.g., speed and memory usage" - which is why CPU-per-call and peak
-memory are reported alongside latency.)
 
 Write scenarios are **self-cleaning**: the scratch table is dropped, bench
 bookings are deleted, and seats are restored. `--skip-writes` gives a
@@ -545,11 +517,6 @@ MySQL 50 INSERTs / 1 commit          12.4    …   (per 50-row batch)
 MySQL 50 INSERTs / 50 commits        58.9    …
 ```
 
-Headlines to expect: Redis ~20–30× faster than the uncached join; indexed
-lookups beat full scans on both stores; one big commit beats fifty small ones;
-`cpu/call` ≪ `avg` on the `[compute]` group proves the DB engine (not the
-client) did the work.
-
 ## Running the logic tests
 
 The test suite (`tests/`) has two layers:
@@ -575,12 +542,6 @@ Each test exists because something specific breaks silently without it:
 | Redis caching + sliding session TTL | Cache bugs are invisible (the page still renders - just slowly, or stale), and a non-sliding session logs users out mid-demo. Asserting the cache key is written and the TTL refreshes makes both observable. |
 | Open-redirect guard, image validation (unit) | Input-handling edge cases (`//evil.com`, `/\evil.com`, fake/oversized images) are exactly what attackers and markers try first; pure-logic tests cover them in milliseconds with no Docker. |
 | Business constants (unit) | Docs, templates and seed generator all assume max-6 tickets / 30-min sessions / upload caps. The test fails loudly if a constant changes so the dependents get updated together. |
-
-Two further reasons the suite earns its place: it's the **regression net** for
-the brief's evolving deliverables (every bug fixed during development got a
-test so it can't return), and it's **proof of executability** for the
-source-code submission - a marker can run `pytest` and watch the database
-guarantees demonstrate themselves.
 
 Integration tests **skip themselves automatically** if the datastores aren't
 reachable, so a plain `pytest` is always safe. Every test cleans up after
@@ -612,18 +573,3 @@ docker compose exec app pytest
 - `debug` is off unless `FLASK_DEBUG=1`; set a real `FLASK_SECRET` outside dev.
 - Uploaded images are type-checked, size-capped (5 MB) and downscaled before storage.
 
-## Mapping to the project brief
-
-| Brief item | Where |
-|---|---|
-| Task 1 - application | This README + `docs/presentation_demo.md` |
-| Task 2 - dataset | Synthetic seed (`scripts/generate_seed.py`); optional Kaggle import |
-| Task 3 - ER + NoSQL schema | `docs/er_diagram.mermaid`, `docs/schema_design.md` |
-| Task 4 - CRUD (SQL + NoSQL, wired into the app) | signup/booking/profile/admin + `sql/queries.sql`; review create/read/like/delete + `mongo/queries.py` |
-| Task 5 - complex / triggers / SQL-vs-NoSQL | `sql/queries.sql` (nested, window, CTE, transaction, triggers); Mongo `$facet` + `$lookup` |
-| Task 6 - GenAI reflection | Final report (see `docs/report_structure.md`) |
-| Task 7 - performance | `scripts/benchmark.py` (6 groups: reads, point lookup, compute, writes incl. trigger cost, txn batching, concurrency) → CSV + chart |
-| Task 8 - web UI + admin | `app/` + `/admin` |
-| Data organisation & security | `docs/schema_design.md`; Security notes above |
-| Object storage | `app/storage.py` + MinIO |
-| Correctness verification | `tests/` (pytest) - unit + integration; see "Running the logic tests" |
